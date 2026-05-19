@@ -42,24 +42,32 @@ function EdgeBadge({ edge, side }: { edge: number; side: string }) {
   );
 }
 
-function ProbBar({ marketProb, yourProb }: { marketProb: number; yourProb: number }) {
-  const market = Math.round(marketProb * 100);
-  const yours = Math.round(yourProb * 100);
+function ProbBar({ label, prob, color }: { label: string; prob: number; color: string }) {
+  const pct = Math.round(prob * 100);
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="w-16">Market</span>
-        <div className="flex-1 rounded-full bg-muted h-1.5">
-          <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${market}%` }} />
-        </div>
-        <span className="w-8 text-right">{market}%</span>
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="w-16 shrink-0">{label}</span>
+      <div className="flex-1 rounded-full bg-muted h-1.5">
+        <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span className="w-16">Analyst</span>
-        <div className="flex-1 rounded-full bg-muted h-1.5">
-          <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${yours}%` }} />
-        </div>
-        <span className="w-8 text-right">{yours}%</span>
+      <span className="w-8 text-right">{pct}%</span>
+    </div>
+  );
+}
+
+function AnalystRow({ analyst }: {
+  analyst: { role: string; yourProb: number; confidence: number; headline: string }
+}) {
+  const pct = Math.round(analyst.yourProb * 100);
+  const conf = Math.round(analyst.confidence * 100);
+  const barColor = conf >= 70 ? 'bg-emerald-500' : conf >= 50 ? 'bg-yellow-500' : 'bg-muted-foreground';
+  return (
+    <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-xs">
+      <span className="text-muted-foreground font-medium">{analyst.role}</span>
+      <span className="text-right font-mono tabular-nums">{pct}% · {conf}% conf</span>
+      <span className="text-muted-foreground/70 col-span-2 truncate">{analyst.headline}</span>
+      <div className="col-span-2 rounded-full bg-muted h-1 mt-0.5">
+        <div className={`h-1 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -67,6 +75,7 @@ function ProbBar({ marketProb, yourProb }: { marketProb: number; yourProb: numbe
 
 function PredictionCard({ p }: { p: Prediction }) {
   const daysLabel = p.daysLeft === 1 ? '1 day' : `${p.daysLeft} days`;
+  const hasBreakdown = p.analystBreakdown && p.analystBreakdown.length > 0;
 
   return (
     <div className="rounded-lg border border-border bg-card p-4 space-y-3">
@@ -76,15 +85,33 @@ function PredictionCard({ p }: { p: Prediction }) {
         <EdgeBadge edge={p.edge} side={p.recommendedSide} />
       </div>
 
-      {/* Prob bars */}
-      <ProbBar marketProb={p.marketProb} yourProb={p.yourProb} />
+      {/* Prob bars — market vs ensemble consensus */}
+      <div className="space-y-1">
+        <ProbBar label="Market" prob={p.marketProb} color="bg-blue-500" />
+        <ProbBar label="Ensemble" prob={p.yourProb} color="bg-emerald-500" />
+      </div>
 
-      {/* Evidence */}
+      {/* Analyst breakdown panel */}
+      {hasBreakdown && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 select-none list-none">
+            <span className="group-open:rotate-90 transition-transform inline-block">›</span>
+            <span>{p.analystCount ?? p.analystBreakdown!.length} analysts · click to expand</span>
+          </summary>
+          <div className="mt-2 space-y-2 border-l-2 border-border pl-3">
+            {p.analystBreakdown!.map((a) => (
+              <AnalystRow key={a.role} analyst={a} />
+            ))}
+          </div>
+        </details>
+      )}
+
+      {/* Key evidence from aggregator */}
       {p.keyEvidence?.length > 0 && (
         <ul className="space-y-1">
           {p.keyEvidence.map((e, i) => (
             <li key={i} className="flex gap-2 text-xs text-muted-foreground">
-              <span className="mt-0.5 text-emerald-500">›</span>
+              <span className="mt-0.5 text-emerald-500 shrink-0">›</span>
               <span>{e}</span>
             </li>
           ))}
@@ -98,6 +125,7 @@ function PredictionCard({ p }: { p: Prediction }) {
         <span>Conf {Math.round(p.confidence * 100)}%</span>
         <span>·</span>
         <span>{daysLabel} left</span>
+        {p.analystCount && <><span>·</span><span>{p.analystCount} analysts</span></>}
       </div>
     </div>
   );
@@ -112,6 +140,8 @@ export default async function PredictionPage() {
     ? new Date(lastRun.finishedAt).toLocaleString()
     : null;
 
+  const totalAnalysts = predictions.reduce((s, p) => s + (p.analystCount ?? 1), 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -119,7 +149,7 @@ export default async function PredictionPage() {
         <div>
           <h1 className="text-2xl font-bold">Prediction Markets</h1>
           <p className="text-sm text-muted-foreground">
-            Polymarket · edge detection · MiroFish analyst pipeline
+            Polymarket · MiroFish 8-analyst ensemble · DGrid
             {lastScan && <span> · Last scan: {lastScan}</span>}
           </p>
         </div>
@@ -128,7 +158,7 @@ export default async function PredictionPage() {
 
       {/* Stats */}
       {predictions.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           <div className="rounded-lg border border-border bg-card p-3 text-center">
             <p className="text-2xl font-bold">{predictions.length}</p>
             <p className="text-xs text-muted-foreground">Markets scanned</p>
@@ -144,6 +174,10 @@ export default async function PredictionPage() {
                 : 0}%
             </p>
             <p className="text-xs text-muted-foreground">Avg edge</p>
+          </div>
+          <div className="rounded-lg border border-border bg-card p-3 text-center">
+            <p className="text-2xl font-bold text-blue-400">{totalAnalysts}</p>
+            <p className="text-xs text-muted-foreground">Total analyst calls</p>
           </div>
         </div>
       )}
