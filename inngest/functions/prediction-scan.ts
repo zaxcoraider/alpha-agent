@@ -2,6 +2,7 @@ import { inngest } from '../client';
 import { runPredictionScan } from '@/lib/agents/prediction';
 import { db } from '@/lib/db/client';
 import { scanRuns, scanResults } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export const predictionScan = inngest.createFunction(
   { id: 'prediction-scan', name: 'Prediction Market Scan' },
@@ -42,7 +43,7 @@ export const predictionScan = inngest.createFunction(
 
       await db.update(scanRuns)
         .set({ status: 'ok', finishedAt: new Date(), itemsFound: String(scanned) })
-        .where((t) => t.id === run.id);
+        .where(eq(scanRuns.id, run.id));
     });
 
     return { scanned, withEdge, saved: predictions.length };
