@@ -1,0 +1,14 @@
+import { z } from 'zod';
+
+const envSchema = z.object({
+  DGRID_API_KEY: z.string().min(1),
+  DGRID_BASE_URL: z.string().url(),
+  DATABASE_URL: z.string().min(1),
+  INNGEST_EVENT_KEY: z.string().optional(),
+  INNGEST_SIGNING_KEY: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHAT_ID: z.string().optional(),
+  NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
+});
+
+export const env = envSchema.parse(process.env);

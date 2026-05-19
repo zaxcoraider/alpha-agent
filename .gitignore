@@ -1,0 +1,18 @@
+# deps
+node_modules/
+
+# next
+.next/
+out/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# drizzle migrations (generated)
+drizzle/
+
+# misc
+.DS_Store
+*.pem
