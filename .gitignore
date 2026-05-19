@@ -16,3 +16,6 @@ drizzle/
 # misc
 .DS_Store
 *.pem
+
+# local memory / personal notes
+memory/
