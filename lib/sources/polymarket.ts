@@ -42,6 +42,45 @@ export interface ParsedMarket {
   source?: 'polymarket' | 'kalshi' | 'metaculus';
 }
 
+// Fetch a single market by Polymarket event slug (from a pasted URL)
+export async function fetchMarketBySlug(slug: string): Promise<ParsedMarket | null> {
+  try {
+    const res = await fetch(`${BASE}/events?slug=${encodeURIComponent(slug)}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+    const events: PolymarketEvent[] = await res.json();
+    const event = events[0];
+    if (!event) return null;
+
+    const now = Date.now();
+    for (const m of event.markets ?? []) {
+      if (!m.outcomePrices || m.outcomePrices.length !== 2) continue;
+      if (!m.active || m.closed) continue;
+      const endDate = m.endDate ?? event.endDate;
+      if (!endDate) continue;
+      const daysLeft = (new Date(endDate).getTime() - now) / 86_400_000;
+      if (daysLeft < 0) continue;
+      const yesPrice = parseFloat(m.outcomePrices[0] ?? '0.5');
+      return {
+        id: m.id,
+        question: m.question,
+        description: m.description ?? event.description ?? '',
+        yesPrice,
+        noPrice: parseFloat(m.outcomePrices[1] ?? String(1 - yesPrice)),
+        volumeUsd: m.volumeNum ?? parseFloat(m.volume ?? '0'),
+        liquidityUsd: m.liquidityNum ?? parseFloat(m.liquidity ?? '0'),
+        endDate,
+        daysLeft: Math.ceil(daysLeft),
+        source: 'polymarket',
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchActiveMarkets(opts?: {
   minVolume?: number;   // USD, default 50_000
   maxDaysLeft?: number; // default 90
