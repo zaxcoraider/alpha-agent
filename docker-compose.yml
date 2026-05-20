@@ -22,7 +22,7 @@ services:
   # Backend API on 5001 — Alpha Agent calls http://localhost:5001
   # Docs: https://github.com/666ghj/MiroFish
   mirofish:
-    image: ghcr.io/666ghj/mirofish:latest
+    image: 666ghj/mirofish:latest  # Docker Hub; alt: ghcr.io/666ghj/mirofish:latest
     container_name: mirofish
     restart: unless-stopped
     ports:
