@@ -39,6 +39,7 @@ export interface ParsedMarket {
   liquidityUsd: number;
   endDate: string;
   daysLeft: number;
+  source?: 'polymarket' | 'kalshi' | 'metaculus';
 }
 
 export async function fetchActiveMarkets(opts?: {
@@ -104,6 +105,7 @@ export async function fetchActiveMarkets(opts?: {
         liquidityUsd: m.liquidityNum ?? parseFloat(m.liquidity ?? '0'),
         endDate,
         daysLeft: Math.ceil(daysLeft),
+        source: 'polymarket',
       });
     }
   }

@@ -73,6 +73,25 @@ function AnalystRow({ analyst }: {
   );
 }
 
+function SourceBadge({ source }: { source?: string }) {
+  if (!source) return null;
+  const styles: Record<string, string> = {
+    polymarket: 'bg-blue-500/15 text-blue-400',
+    kalshi:     'bg-orange-500/15 text-orange-400',
+    metaculus:  'bg-teal-500/15 text-teal-400',
+  };
+  const labels: Record<string, string> = {
+    polymarket: 'Polymarket',
+    kalshi:     'Kalshi',
+    metaculus:  'Metaculus',
+  };
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold shrink-0 ${styles[source] ?? 'bg-muted text-muted-foreground'}`}>
+      {labels[source] ?? source}
+    </span>
+  );
+}
+
 function PredictionCard({ p }: { p: Prediction }) {
   const daysLabel = p.daysLeft === 1 ? '1 day' : `${p.daysLeft} days`;
   const hasBreakdown = p.analystBreakdown && p.analystBreakdown.length > 0;
@@ -83,6 +102,7 @@ function PredictionCard({ p }: { p: Prediction }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm font-medium leading-snug">{p.question}</p>
+          <SourceBadge source={p.source} />
           {p.miroFishEnhanced && (
             <span className="rounded-full bg-purple-500/15 text-purple-400 px-2 py-0.5 text-xs font-semibold shrink-0">
               MiroFish
@@ -156,7 +176,7 @@ export default async function PredictionPage() {
         <div>
           <h1 className="text-2xl font-bold">Prediction Markets</h1>
           <p className="text-sm text-muted-foreground">
-            Polymarket · 10-analyst ensemble · Grok X · MiroFish swarm · DGrid
+            Polymarket · Kalshi · 10-analyst ensemble · Grok X · MiroFish swarm · DGrid
             {lastScan && <span> · Last scan: {lastScan}</span>}
           </p>
         </div>

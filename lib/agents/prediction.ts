@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { AGENT_MODELS } from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
+import { fetchKalshiMarkets } from '@/lib/sources/kalshi';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
 import { runMiroFishAnalysis } from '@/lib/sources/mirofish';
 
@@ -29,6 +30,7 @@ export const PredictionSchema = z.object({
     headline: z.string(),
   })).optional(),
   miroFishEnhanced: z.boolean().optional(), // true if MiroFish swarm ran for this market
+  source: z.enum(['polymarket', 'kalshi', 'metaculus']).optional(),
 });
 
 export type Prediction = z.infer<typeof PredictionSchema>;
@@ -238,6 +240,7 @@ export async function analyseMarket(
     daysLeft: market.daysLeft,
     analystCount: opinions.length,
     miroFishEnhanced: miroFishReport !== null,
+    source: market.source,
     analystBreakdown: opinions.map((o) => ({
       role: o.role,
       yourProb: o.yourProb,
@@ -254,7 +257,14 @@ export async function runPredictionScan(): Promise<{
   scanned: number;
   withEdge: number;
 }> {
-  const markets = await fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 });
+  // Pull from both exchanges in parallel — Kalshi has lower volume so lower threshold
+  const [polyMarkets, kalshiMarkets] = await Promise.all([
+    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 }),
+    fetchKalshiMarkets({ minVolume: 5_000, maxDaysLeft: 90, limit: 15 }),
+  ]);
+
+  // Merge: Polymarket first (higher volume), then Kalshi; cap at 40 total
+  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 40);
 
   // Top 3 highest-volume markets get the full MiroFish swarm treatment.
   // We run MiroFish in parallel while the ensemble runs — they share the context.
