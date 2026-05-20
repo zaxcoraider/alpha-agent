@@ -2,13 +2,13 @@ import { tavilySearch } from './tavily';
 import { fetchRssFeeds, type RssFeedItem } from './rss';
 import { fetchCryptoPanicNews } from './cryptopanic';
 import { searchReddit } from './reddit';
-import { searchTweets } from './twitter';
+import { getGrokSocialSignal } from './grok-social';
 
 export interface PredictionContext {
   webSummary: string;
   newsHeadlines: string;
   redditSentiment: string;
-  twitterBuzz: string;
+  xSocialSignal: string;   // Grok native X/Twitter analysis
 }
 
 const STOPWORDS = new Set([
@@ -17,11 +17,6 @@ const STOPWORDS = new Set([
   'above', 'below', 'over', 'under', 'most', 'least', 'more', 'less', 'end',
   'before', 'after', 'during', 'year', 'month', 'week', 'day', 'price',
 ]);
-
-function relevanceScore(text: string, keywords: string[]): number {
-  const lower = text.toLowerCase();
-  return keywords.filter((kw) => lower.includes(kw)).length;
-}
 
 function extractKeywords(question: string): string[] {
   return question
@@ -35,7 +30,12 @@ function filterRelevant(items: RssFeedItem[], question: string, max = 6): RssFee
   const kws = extractKeywords(question);
   if (kws.length === 0) return items.slice(0, max);
   return items
-    .map((item) => ({ item, score: relevanceScore(`${item.title} ${item.snippet}`, kws) }))
+    .map((item) => ({
+      item,
+      score: kws.filter((kw) =>
+        `${item.title} ${item.snippet}`.toLowerCase().includes(kw),
+      ).length,
+    }))
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, max)
@@ -43,12 +43,12 @@ function filterRelevant(items: RssFeedItem[], question: string, max = 6): RssFee
 }
 
 export async function buildPredictionContext(question: string): Promise<PredictionContext> {
-  const [tavilyRes, rssRes, cryptoRes, redditRes, twitterRes] = await Promise.allSettled([
+  const [tavilyRes, rssRes, cryptoRes, redditRes, grokRes] = await Promise.allSettled([
     tavilySearch(question, { maxResults: 5, topic: 'news' }),
     fetchRssFeeds(48),
     fetchCryptoPanicNews(48),
     searchReddit(question, { limit: 10, timeRange: 'week' }),
-    searchTweets(question, 8),
+    getGrokSocialSignal(question),
   ]);
 
   // ── Web summary (Tavily) ─────────────────────────────────────────────────────
@@ -62,19 +62,17 @@ export async function buildPredictionContext(question: string): Promise<Predicti
     webSummary = r.answer ? `${r.answer}\n\n${snippets}` : snippets || webSummary;
   }
 
-  // ── News headlines (RSS + CryptoPanic, filtered by relevance) ────────────────
+  // ── News headlines (RSS + CryptoPanic, keyword-filtered) ─────────────────────
   let newsHeadlines = 'No relevant headlines found.';
   const allNews: RssFeedItem[] = [];
   if (rssRes.status === 'fulfilled') allNews.push(...rssRes.value);
   if (cryptoRes.status === 'fulfilled') allNews.push(...cryptoRes.value);
   const relevant = filterRelevant(allNews, question, 6);
   if (relevant.length > 0) {
-    newsHeadlines = relevant
-      .map((n) => `• [${n.source}] ${n.title}`)
-      .join('\n');
+    newsHeadlines = relevant.map((n) => `• [${n.source}] ${n.title}`).join('\n');
   }
 
-  // ── Reddit sentiment ─────────────────────────────────────────────────────────
+  // ── Reddit ───────────────────────────────────────────────────────────────────
   let redditSentiment = 'No Reddit signals.';
   if (redditRes.status === 'fulfilled' && redditRes.value.length > 0) {
     redditSentiment = redditRes.value
@@ -83,16 +81,24 @@ export async function buildPredictionContext(question: string): Promise<Predicti
       .join('\n');
   }
 
-  // ── Twitter/X buzz ───────────────────────────────────────────────────────────
-  let twitterBuzz = 'No Twitter/X signals (key not configured).';
-  if (twitterRes.status === 'fulfilled' && twitterRes.value.length > 0) {
-    twitterBuzz = twitterRes.value
-      .slice(0, 5)
-      .map((t) => `• @${t.author} (❤️${t.likeCount} 🔁${t.retweetCount}): ${t.text}`)
-      .join('\n');
+  // ── Grok X/Twitter signal ────────────────────────────────────────────────────
+  let xSocialSignal = 'No X/Twitter signal available.';
+  if (grokRes.status === 'fulfilled' && grokRes.value) {
+    const g = grokRes.value;
+    const scoreBar = g.sentimentScore >= 0
+      ? `+${g.sentimentScore.toFixed(2)} → leans YES`
+      : `${g.sentimentScore.toFixed(2)} → leans NO`;
+    const narratives = g.topNarratives.map((n) => `  • ${n}`).join('\n');
+    const accounts = g.keyAccounts.length > 0
+      ? `Key voices: @${g.keyAccounts.join(', @')}`
+      : '';
+    xSocialSignal = `Sentiment: ${g.sentiment.toUpperCase()} | Score: ${scoreBar} | Volume: ${g.volumeTrend}
+${g.summary}
+Top narratives:
+${narratives}${accounts ? `\n${accounts}` : ''}`;
   }
 
-  return { webSummary, newsHeadlines, redditSentiment, twitterBuzz };
+  return { webSummary, newsHeadlines, redditSentiment, xSocialSignal };
 }
 
 export function formatContextBlock(ctx: PredictionContext): string {
@@ -108,7 +114,7 @@ ${ctx.newsHeadlines}
 [REDDIT COMMUNITY SIGNALS]
 ${ctx.redditSentiment}
 
-[TWITTER/X BUZZ]
-${ctx.twitterBuzz}
+[X/TWITTER SOCIAL SIGNAL — powered by Grok]
+${ctx.xSocialSignal}
 `.trim();
 }

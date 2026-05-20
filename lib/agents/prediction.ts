@@ -1,7 +1,7 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { AGENT_MODELS } from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
 
@@ -106,7 +106,7 @@ async function runAnalyst(
 ): Promise<AnalystOpinion | null> {
   try {
     const { object } = await generateObject({
-      model: dgrid(MODELS.balanced), // claude-sonnet-4 — quality ensemble
+      model: dgrid(AGENT_MODELS.prediction_analyst), // claude-sonnet-4.6
       schema: AnalystSchema,
       prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
 
@@ -149,7 +149,7 @@ async function aggregateOpinions(
     .join('\n');
 
   const { object } = await generateObject({
-    model: dgrid(MODELS.reasoner), // claude-opus-4 — synthesis
+    model: dgrid(AGENT_MODELS.prediction_aggregator), // claude-opus-4.7
     schema: AggregatorSchema,
     prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.
 
