@@ -17,5 +17,31 @@ services:
     ports:
       - '6379:6379'
 
+  # ── MiroFish swarm simulation engine ──────────────────────────────────────
+  # Frontend on 3001 (avoids conflict with Next.js on 3000)
+  # Backend API on 5001 — Alpha Agent calls http://localhost:5001
+  # Docs: https://github.com/666ghj/MiroFish
+  mirofish:
+    image: ghcr.io/666ghj/mirofish:latest
+    container_name: mirofish
+    restart: unless-stopped
+    ports:
+      - '3001:3000'   # MiroFish UI  → localhost:3001
+      - '5001:5001'   # MiroFish API → localhost:5001
+    environment:
+      # Main LLM — DGrid → DeepSeek V3.2 (fast, cheap for 100s of agents)
+      LLM_API_KEY: ${DGRID_API_KEY}
+      LLM_BASE_URL: https://api.dgrid.ai/v1
+      LLM_MODEL_NAME: deepseek/deepseek-v3.2
+      # Boost LLM — DGrid → Claude Opus 4.7 (Report Agent synthesis only)
+      LLM_BOOST_API_KEY: ${DGRID_API_KEY}
+      LLM_BOOST_BASE_URL: https://api.dgrid.ai/v1
+      LLM_BOOST_MODEL_NAME: anthropic/claude-opus-4.7
+      # Zep knowledge graph memory — get free key at https://app.getzep.com
+      ZEP_API_KEY: ${ZEP_API_KEY}
+    volumes:
+      - mirofish_uploads:/app/backend/uploads
+
 volumes:
   pgdata:
+  mirofish_uploads:

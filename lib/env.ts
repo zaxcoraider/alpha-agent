@@ -7,6 +7,8 @@ const envSchema = z.object({
   TAVILY_API_KEY: z.string().optional(),
   CRYPTOPANIC_TOKEN: z.string().optional(),
   TWITTERAPI_IO_KEY: z.string().optional(),
+  ZEP_API_KEY: z.string().optional(),
+  MIROFISH_URL: z.string().url().default('http://localhost:5001'),
   INNGEST_EVENT_KEY: z.string().optional(),
   INNGEST_SIGNING_KEY: z.string().optional(),
   TELEGRAM_BOT_TOKEN: z.string().optional(),

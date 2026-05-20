@@ -4,6 +4,7 @@ import { dgrid } from '@/lib/llm/client';
 import { AGENT_MODELS } from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
+import { runMiroFishAnalysis } from '@/lib/sources/mirofish';
 
 // ─── Final output schema (stored in DB) ──────────────────────────────────────
 
@@ -27,6 +28,7 @@ export const PredictionSchema = z.object({
     confidence: z.number(),
     headline: z.string(),
   })).optional(),
+  miroFishEnhanced: z.boolean().optional(), // true if MiroFish swarm ran for this market
 });
 
 export type Prediction = z.infer<typeof PredictionSchema>;
@@ -141,6 +143,7 @@ async function aggregateOpinions(
   market: ParsedMarket,
   opinions: AnalystOpinion[],
   contextBlock: string,
+  miroFishReport: string | null,
 ): Promise<z.infer<typeof AggregatorSchema>> {
   const panel = opinions
     .map((o) =>
@@ -148,17 +151,21 @@ async function aggregateOpinions(
     )
     .join('\n');
 
+  const miroSection = miroFishReport
+    ? `\n━━━ MIROFISH SWARM SIMULATION (hundreds of agents, emergent consensus) ━━━\n${miroFishReport.slice(0, 1200)}\n`
+    : '';
+
   const { object } = await generateObject({
     model: dgrid(AGENT_MODELS.prediction_aggregator), // claude-opus-4.7
     schema: AggregatorSchema,
-    prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.
+    prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.${miroFishReport ? ' You also have a MiroFish swarm simulation report from hundreds of emergent agents.' : ''}
 
 MARKET: ${market.question}
 Market Implied Probability (YES): ${(market.yesPrice * 100).toFixed(1)}%
 Volume: $${market.volumeUsd.toLocaleString()} | Resolves: ${market.endDate} (${market.daysLeft} days)
 
 ${contextBlock}
-
+${miroSection}
 ANALYST PANEL:
 ${panel}
 
@@ -179,7 +186,10 @@ Calibration rules:
 
 // ─── Full ensemble for one market ────────────────────────────────────────────
 
-export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
+export async function analyseMarket(
+  market: ParsedMarket,
+  miroFishReport: string | null = null,
+): Promise<Prediction> {
   // Step 1: fetch live context (all sources in parallel inside buildPredictionContext)
   const ctx = await buildPredictionContext(market.question).catch(() => null);
   const contextBlock = ctx
@@ -202,8 +212,8 @@ export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
     throw new Error(`All analysts failed for market ${market.id}`);
   }
 
-  // Aggregate with Chief Analyst (claude-opus-4)
-  const agg = await aggregateOpinions(market, opinions, contextBlock);
+  // Step 3: Aggregate — inject MiroFish swarm report if available (claude-opus-4.7)
+  const agg = await aggregateOpinions(market, opinions, contextBlock, miroFishReport);
 
   const edge = Math.abs(agg.consensusProb - market.yesPrice);
   const recommendedSide =
@@ -227,6 +237,7 @@ export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
     endDate: market.endDate,
     daysLeft: market.daysLeft,
     analystCount: opinions.length,
+    miroFishEnhanced: miroFishReport !== null,
     analystBreakdown: opinions.map((o) => ({
       role: o.role,
       yourProb: o.yourProb,
@@ -245,11 +256,34 @@ export async function runPredictionScan(): Promise<{
 }> {
   const markets = await fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 });
 
-  // Batches of 2 — each market fires 10 analyst + 1 aggregator + 5 source calls
+  // Top 3 highest-volume markets get the full MiroFish swarm treatment.
+  // We run MiroFish in parallel while the ensemble runs — they share the context.
+  const top3 = markets.slice(0, 3);
+  const rest  = markets.slice(3);
+
+  // Kick off MiroFish for top 3 simultaneously (each runs its own pipeline)
+  // Pass an empty contextBlock here — analyseMarket will build the real context
+  const miroFishPromises = top3.map((m) =>
+    runMiroFishAnalysis(m, `Question: ${m.question}`).catch(() => null),
+  );
+
+  // Run ensemble on ALL markets in batches of 2
+  const miroFishReports = await Promise.all(miroFishPromises);
+
   const predictions: Prediction[] = [];
-  for (let i = 0; i < markets.length; i += 2) {
-    const batch = markets.slice(i, i + 2);
-    const results = await Promise.allSettled(batch.map(analyseMarket));
+
+  // Top 3: run ensemble WITH MiroFish reports
+  const top3Results = await Promise.allSettled(
+    top3.map((m, i) => analyseMarket(m, miroFishReports[i])),
+  );
+  for (const r of top3Results) {
+    if (r.status === 'fulfilled') predictions.push(r.value);
+  }
+
+  // Remaining: standard 10-analyst ensemble
+  for (let i = 0; i < rest.length; i += 2) {
+    const batch = rest.slice(i, i + 2);
+    const results = await Promise.allSettled(batch.map((m) => analyseMarket(m, null)));
     for (const r of results) {
       if (r.status === 'fulfilled') predictions.push(r.value);
     }

@@ -78,10 +78,17 @@ function PredictionCard({ p }: { p: Prediction }) {
   const hasBreakdown = p.analystBreakdown && p.analystBreakdown.length > 0;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+    <div className={`rounded-lg border bg-card p-4 space-y-3 ${p.miroFishEnhanced ? 'border-purple-500/40' : 'border-border'}`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium leading-snug">{p.question}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-medium leading-snug">{p.question}</p>
+          {p.miroFishEnhanced && (
+            <span className="rounded-full bg-purple-500/15 text-purple-400 px-2 py-0.5 text-xs font-semibold shrink-0">
+              MiroFish
+            </span>
+          )}
+        </div>
         <EdgeBadge edge={p.edge} side={p.recommendedSide} />
       </div>
 
@@ -149,7 +156,7 @@ export default async function PredictionPage() {
         <div>
           <h1 className="text-2xl font-bold">Prediction Markets</h1>
           <p className="text-sm text-muted-foreground">
-            Polymarket · MiroFish 8-analyst ensemble · DGrid
+            Polymarket · 10-analyst ensemble · Grok X · MiroFish swarm · DGrid
             {lastScan && <span> · Last scan: {lastScan}</span>}
           </p>
         </div>
