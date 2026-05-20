@@ -221,7 +221,7 @@ export async function runPredictionScan(): Promise<{
   scanned: number;
   withEdge: number;
 }> {
-  const markets = await fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 30 });
+  const markets = await fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 });
 
   // Analyse in batches of 2 (each market now fires 8+1 LLM calls)
   const predictions: Prediction[] = [];
