@@ -3,6 +3,7 @@ import { runPredictionScan } from '@/lib/agents/prediction';
 import { db } from '@/lib/db/client';
 import { scanRuns, scanResults } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { sendScanAlert } from '@/lib/telegram';
 
 export const predictionScan = inngest.createFunction(
   { id: 'prediction-scan', name: 'Prediction Market Scan' },
@@ -30,7 +31,7 @@ export const predictionScan = inngest.createFunction(
         await db.insert(scanResults).values({
           runId: run.id,
           agent: 'prediction',
-          externalId: `polymarket-${p.marketId}`,
+          externalId: p.marketId,
           title: p.question,
           summary: p.reasoning,
           score: String(Math.round(p.edge * 100) / 10), // edge as score 0-10
@@ -44,6 +45,10 @@ export const predictionScan = inngest.createFunction(
       await db.update(scanRuns)
         .set({ status: 'ok', finishedAt: new Date(), itemsFound: String(scanned) })
         .where(eq(scanRuns.id, run.id));
+    });
+
+    await step.run('telegram-alert', async () => {
+      await sendScanAlert(predictions, scanned);
     });
 
     return { scanned, withEdge, saved: predictions.length };
