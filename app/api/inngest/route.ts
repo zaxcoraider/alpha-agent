@@ -4,8 +4,9 @@ import { morningScan } from '@/inngest/functions/morning-scan';
 import { predictionScan } from '@/inngest/functions/prediction-scan';
 import { newsScan } from '@/inngest/functions/news-scan';
 import { customPredict } from '@/inngest/functions/custom-predict';
+import { telegramPoll } from '@/inngest/functions/telegram-poll';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [morningScan, predictionScan, newsScan, customPredict],
+  functions: [morningScan, predictionScan, newsScan, customPredict, telegramPoll],
 });
