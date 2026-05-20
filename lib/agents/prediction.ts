@@ -110,8 +110,9 @@ async function runAnalyst(
 ): Promise<AnalystOpinion | null> {
   try {
     const { object } = await generateObject({
-      model: dgrid(AGENT_MODELS.prediction_analyst), // claude-sonnet-4.6
+      model: dgrid(AGENT_MODELS.prediction_analyst),
       schema: AnalystSchema,
+      abortSignal: AbortSignal.timeout(25_000),
       prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
 
 MARKET:
@@ -158,8 +159,9 @@ async function aggregateOpinions(
     : '';
 
   const { object } = await generateObject({
-    model: dgrid(AGENT_MODELS.prediction_aggregator), // claude-opus-4.7
+    model: dgrid(AGENT_MODELS.prediction_aggregator),
     schema: AggregatorSchema,
+    abortSignal: AbortSignal.timeout(30_000),
     prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.${miroFishReport ? ' You also have a MiroFish swarm simulation report from hundreds of emergent agents.' : ''}
 
 MARKET: ${market.question}

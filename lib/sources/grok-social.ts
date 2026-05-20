@@ -23,8 +23,9 @@ export async function getGrokSocialSignal(
 ): Promise<GrokSocialSignal | null> {
   try {
     const { object } = await generateObject({
-      model: dgrid(AGENT_MODELS.prediction_social), // grok-4.20-non-reasoning
+      model: dgrid(AGENT_MODELS.prediction_social),
       schema: GrokSocialSchema,
+      abortSignal: AbortSignal.timeout(20_000),
       prompt: `You have real-time access to X (Twitter). Search X right now for recent posts and discussions related to this prediction market question:
 
 "${question}"

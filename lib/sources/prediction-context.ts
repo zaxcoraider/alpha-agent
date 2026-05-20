@@ -42,13 +42,20 @@ function filterRelevant(items: RssFeedItem[], question: string, max = 6): RssFee
     .map(({ item }) => item);
 }
 
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
 export async function buildPredictionContext(question: string): Promise<PredictionContext> {
   const [tavilyRes, rssRes, cryptoRes, redditRes, grokRes] = await Promise.allSettled([
-    tavilySearch(question, { maxResults: 5, topic: 'news' }),
-    fetchRssFeeds(48),
-    fetchCryptoPanicNews(48),
-    searchReddit(question, { limit: 10, timeRange: 'week' }),
-    getGrokSocialSignal(question),
+    withTimeout(tavilySearch(question, { maxResults: 5, topic: 'news' }), 12_000),
+    withTimeout(fetchRssFeeds(48), 8_000),
+    withTimeout(fetchCryptoPanicNews(48), 8_000),
+    withTimeout(searchReddit(question, { limit: 10, timeRange: 'week' }), 8_000),
+    withTimeout(getGrokSocialSignal(question), 22_000),
   ]);
 
   // ── Web summary (Tavily) ─────────────────────────────────────────────────────
