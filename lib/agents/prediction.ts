@@ -1,25 +1,25 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
-import { AGENT_MODELS, MODELS } from '@/lib/llm/models';
+import { MODELS } from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
+import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
 
-// ─── Final output schema (what gets stored in DB) ────────────────────────────
+// ─── Final output schema (stored in DB) ──────────────────────────────────────
 
 export const PredictionSchema = z.object({
   marketId: z.string(),
   question: z.string(),
   marketProb: z.number().min(0).max(1),
-  yourProb: z.number().min(0).max(1),       // ensemble consensus
+  yourProb: z.number().min(0).max(1),
   edge: z.number().min(0).max(1),
   recommendedSide: z.enum(['YES', 'NO', 'SKIP']),
-  confidence: z.number().min(0).max(1),     // avg analyst confidence
+  confidence: z.number().min(0).max(1),
   keyEvidence: z.array(z.string()).max(5),
-  reasoning: z.string().max(800),           // synthesis from aggregator
+  reasoning: z.string().max(800),
   volumeUsd: z.number(),
   endDate: z.string(),
   daysLeft: z.number(),
-  // ensemble metadata
   analystCount: z.number(),
   analystBreakdown: z.array(z.object({
     role: z.string(),
@@ -31,18 +31,18 @@ export const PredictionSchema = z.object({
 
 export type Prediction = z.infer<typeof PredictionSchema>;
 
-// ─── Individual analyst output schema ────────────────────────────────────────
+// ─── Analyst output schema ────────────────────────────────────────────────────
 
 const AnalystSchema = z.object({
   yourProb: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
-  headline: z.string().max(120),    // one-sentence thesis
+  headline: z.string().max(120),
   evidence: z.array(z.string()).max(3),
 });
 
 type AnalystOpinion = z.infer<typeof AnalystSchema> & { role: string };
 
-// ─── Aggregator output schema ─────────────────────────────────────────────────
+// ─── Aggregator schema ────────────────────────────────────────────────────────
 
 const AggregatorSchema = z.object({
   consensusProb: z.number().min(0).max(1),
@@ -51,40 +51,48 @@ const AggregatorSchema = z.object({
   reasoning: z.string().max(800),
 });
 
-// ─── The 8 analyst roles (MiroFish ensemble) ─────────────────────────────────
+// ─── 10-analyst ensemble ──────────────────────────────────────────────────────
 
 const ANALYST_ROLES = [
   {
     role: 'Macro Analyst',
-    lens: 'Focus on macro-economic trends, policy cycles, and structural forces that could move this outcome. Calibrate against historical crowd accuracy on macro-driven events.',
+    lens: 'Focus on macro-economic trends, policy cycles, interest rates, and structural forces. How do the current macro regime and global risk sentiment affect this outcome? Calibrate against historical crowd accuracy on macro-driven events.',
   },
   {
     role: 'Base Rate Analyst',
-    lens: 'Ignore all narrative. Focus purely on historical base rates: How often do events of this type resolve YES? What is the reference class? Anchor your estimate there before adjusting.',
+    lens: 'Ignore all narrative. Focus purely on historical base rates: How often do events of this exact type resolve YES? What is the right reference class? Anchor hard to the base rate before any adjustment.',
   },
   {
     role: 'Contrarian Analyst',
-    lens: 'Steel-man the case AGAINST the crowd consensus. What is the market missing? What tail risk or overlooked factor shifts the probability significantly?',
+    lens: 'Steel-man the case AGAINST the current market consensus. What is the crowd missing? What overlooked factor, tail risk, or contrary evidence shifts the probability significantly away from the market price?',
   },
   {
     role: 'News Catalyst Analyst',
-    lens: 'Identify specific known catalysts, upcoming events, scheduled announcements, or structural triggers that could shift the resolution before the deadline.',
+    lens: 'Use the live news context provided. Identify specific upcoming events, scheduled announcements, regulatory decisions, or structural triggers that could shift the resolution before the deadline. Weight catalysts by proximity and magnitude.',
   },
   {
     role: 'Market Microstructure Analyst',
-    lens: 'Analyze the market mechanics: volume trends, liquidity depth, recent price movement. Is this market efficiently priced or are there signs of informed trading or thin liquidity distortion?',
+    lens: 'Analyze the market mechanics: volume trends, liquidity depth, bid-ask spread, recent price movement velocity. Is this market efficiently priced or are there signs of informed trading, thin liquidity distortion, or late-money manipulation?',
   },
   {
-    role: 'Sentiment Analyst',
-    lens: 'Model crowd psychology and social consensus. Is the market experiencing herding, overconfidence, or narrative bias? Where is retail vs sophisticated money likely positioned?',
+    role: 'Social Sentiment Analyst',
+    lens: 'Use the Reddit and Twitter/X signals provided. Assess crowd psychology: Are retail participants herding? Is there a narrative dominating that the fundamentals don\'t support? What is the social volume trend and sentiment direction vs. 1 week ago?',
   },
   {
-    role: 'Political/Regulatory Analyst',
-    lens: 'Assess political dynamics, regulatory environment, and institutional behavior patterns. Focus on power structures, incentives of key decision-makers, and precedents.',
+    role: 'Political & Regulatory Analyst',
+    lens: 'Assess political dynamics, regulatory environment, and institutional behavior. Focus on power structures, incentives of key decision-makers, legislative timelines, and legal/compliance precedents that could force a specific resolution.',
   },
   {
-    role: 'Risk Analyst',
-    lens: 'Focus on downside risk and tail scenarios. What black-swan or low-probability high-impact events could force an unexpected resolution? Assign probability mass to these tails.',
+    role: 'Risk & Tail Analyst',
+    lens: 'Focus exclusively on downside risk and black-swan scenarios. What low-probability, high-impact events could force an unexpected resolution? Assign probability mass to these tails explicitly. Do NOT anchor to the base case.',
+  },
+  {
+    role: 'Crypto Fundamentals Analyst',
+    lens: 'Assess on-chain and protocol fundamentals: TVL trends, developer activity, token unlock schedules, exchange inflow/outflow signals, whale wallet movements, and protocol revenue. Ground your estimate in verifiable on-chain data signals from the news context.',
+  },
+  {
+    role: 'Quantitative Momentum Analyst',
+    lens: 'Focus on price momentum, volume patterns, and statistical signals. What does the recent market price trajectory imply about resolution probability? Apply quantitative thinking: trend strength, mean-reversion probability, and volatility-adjusted edge estimation.',
   },
 ] as const;
 
@@ -94,29 +102,31 @@ async function runAnalyst(
   market: ParsedMarket,
   role: string,
   lens: string,
+  contextBlock: string,
 ): Promise<AnalystOpinion | null> {
   try {
-    const prompt = `You are a ${role} in a prediction market analyst ensemble.
+    const { object } = await generateObject({
+      model: dgrid(MODELS.balanced), // claude-sonnet-4 — quality ensemble
+      schema: AnalystSchema,
+      prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
 
 MARKET:
 - Question: ${market.question}
-- Description: ${market.description?.slice(0, 600) || 'No description.'}
-- Current Market Implied Probability (YES): ${(market.yesPrice * 100).toFixed(1)}%
+- Description: ${market.description?.slice(0, 500) || 'No description.'}
+- Market Implied Probability (YES): ${(market.yesPrice * 100).toFixed(1)}%
 - Volume: $${market.volumeUsd.toLocaleString()} | Liquidity: $${market.liquidityUsd.toLocaleString()}
 - Resolves: ${market.endDate} (${market.daysLeft} days left)
 
-YOUR ANALYTICAL LENS: ${lens}
+${contextBlock}
 
-Apply ONLY your specialist lens above. Give your probability estimate for YES resolution and your confidence in it.
-- yourProb: your estimate (not just anchoring on market price)
-- confidence: how certain you are (0.0 = random guess, 1.0 = near certain)
-- headline: one sentence summarizing your thesis
-- evidence: 1-3 bullet points from your lens`;
+YOUR SPECIALIST LENS: ${lens}
 
-    const { object } = await generateObject({
-      model: dgrid(MODELS.classifier), // DeepSeek — fast + cheap for ensemble
-      schema: AnalystSchema,
-      prompt,
+Apply ONLY your lens above. Use the live intelligence context where relevant to your role.
+Output:
+- yourProb: YOUR probability estimate for YES (do not blindly anchor to market price)
+- confidence: your certainty in this estimate (0.0 = random guess, 1.0 = near certain)
+- headline: one crisp sentence summarizing your thesis
+- evidence: 2-3 specific bullet points supporting your estimate`,
     });
 
     return { ...object, role };
@@ -125,53 +135,66 @@ Apply ONLY your specialist lens above. Give your probability estimate for YES re
   }
 }
 
-// ─── Aggregate analyst opinions into final verdict ────────────────────────────
+// ─── Chief Analyst aggregation ────────────────────────────────────────────────
 
 async function aggregateOpinions(
   market: ParsedMarket,
   opinions: AnalystOpinion[],
+  contextBlock: string,
 ): Promise<z.infer<typeof AggregatorSchema>> {
-  const opinionText = opinions
-    .map((o) => `${o.role}: prob=${(o.yourProb * 100).toFixed(0)}%, conf=${(o.confidence * 100).toFixed(0)}%\n  "${o.headline}"`)
+  const panel = opinions
+    .map((o) =>
+      `${o.role}: prob=${(o.yourProb * 100).toFixed(0)}%, conf=${(o.confidence * 100).toFixed(0)}%\n  "${o.headline}"`,
+    )
     .join('\n');
 
-  const prompt = `You are the Chief Analyst aggregating a ${opinions.length}-member analyst ensemble for a prediction market.
+  const { object } = await generateObject({
+    model: dgrid(MODELS.reasoner), // claude-opus-4 — synthesis
+    schema: AggregatorSchema,
+    prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.
 
 MARKET: ${market.question}
 Market Implied Probability (YES): ${(market.yesPrice * 100).toFixed(1)}%
-Volume: $${market.volumeUsd.toLocaleString()} | Resolves: ${market.endDate}
+Volume: $${market.volumeUsd.toLocaleString()} | Resolves: ${market.endDate} (${market.daysLeft} days)
 
-ANALYST PANEL OPINIONS:
-${opinionText}
+${contextBlock}
+
+ANALYST PANEL:
+${panel}
 
 TASK:
-1. Compute a confidence-weighted consensus probability (weight each analyst by their confidence score)
-2. Identify where analysts agree vs. where they sharply diverge — divergence reduces consensus confidence
-3. Synthesize the 3-5 most important evidence points across all analysts
-4. Write a 2-4 sentence investment thesis
+1. Compute a confidence-weighted consensus probability (weight each analyst's estimate by their stated confidence)
+2. Identify where analysts agree vs. sharply diverge — high divergence lowers consensus confidence
+3. Synthesize the 3-5 most important evidence points from across the panel AND the live context
+4. Write a tight 2-4 sentence investment thesis grounded in the strongest signals
 
-Be honest about disagreement. If analysts are highly split, lower the confidence accordingly.`;
-
-  const { object } = await generateObject({
-    model: dgrid(AGENT_MODELS.prediction), // Claude Opus — synthesis only
-    schema: AggregatorSchema,
-    prompt,
+Calibration rules:
+- If analysts are highly split (>20% spread), lower confidence to reflect genuine uncertainty
+- Do NOT over-anchor to the market price — the ensemble exists to find disagreement with it
+- Cite specific facts from the live context where they support the thesis`,
   });
 
   return object;
 }
 
-// ─── Run full ensemble for one market ────────────────────────────────────────
+// ─── Full ensemble for one market ────────────────────────────────────────────
 
 export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
-  // Run all 8 analysts in parallel
-  const rawOpinions = await Promise.allSettled(
-    ANALYST_ROLES.map((a) => runAnalyst(market, a.role, a.lens))
+  // Step 1: fetch live context (all sources in parallel inside buildPredictionContext)
+  const ctx = await buildPredictionContext(market.question).catch(() => null);
+  const contextBlock = ctx
+    ? formatContextBlock(ctx)
+    : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
+
+  // Step 2: run all 10 analysts in parallel with the context
+  const analystResults = await Promise.allSettled(
+    ANALYST_ROLES.map((a) => runAnalyst(market, a.role, a.lens, contextBlock)),
   );
 
-  const opinions: AnalystOpinion[] = rawOpinions
-    .filter((r): r is PromiseFulfilledResult<AnalystOpinion> =>
-      r.status === 'fulfilled' && r.value !== null
+  const opinions: AnalystOpinion[] = analystResults
+    .filter(
+      (r): r is PromiseFulfilledResult<AnalystOpinion> =>
+        r.status === 'fulfilled' && r.value !== null,
     )
     .map((r) => r.value);
 
@@ -179,10 +202,9 @@ export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
     throw new Error(`All analysts failed for market ${market.id}`);
   }
 
-  // Aggregate with Chief Analyst
-  const agg = await aggregateOpinions(market, opinions);
+  // Aggregate with Chief Analyst (claude-opus-4)
+  const agg = await aggregateOpinions(market, opinions, contextBlock);
 
-  // Enforce edge / skip logic
   const edge = Math.abs(agg.consensusProb - market.yesPrice);
   const recommendedSide =
     edge < 0.10 || agg.confidence < 0.60
@@ -214,7 +236,7 @@ export async function analyseMarket(market: ParsedMarket): Promise<Prediction> {
   };
 }
 
-// ─── Run full prediction scan ─────────────────────────────────────────────────
+// ─── Full prediction scan ─────────────────────────────────────────────────────
 
 export async function runPredictionScan(): Promise<{
   predictions: Prediction[];
@@ -223,7 +245,7 @@ export async function runPredictionScan(): Promise<{
 }> {
   const markets = await fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 });
 
-  // Analyse in batches of 2 (each market now fires 8+1 LLM calls)
+  // Batches of 2 — each market fires 10 analyst + 1 aggregator + 5 source calls
   const predictions: Prediction[] = [];
   for (let i = 0; i < markets.length; i += 2) {
     const batch = markets.slice(i, i + 2);

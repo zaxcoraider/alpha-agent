@@ -1,7 +1,5 @@
 import type { RssFeedItem } from './rss';
-
-// CryptoPanic free API — get a free token at cryptopanic.com/developers/api
-// Falls back gracefully if CRYPTOPANIC_TOKEN is not set.
+import { env } from '@/lib/env';
 
 interface CryptoPanicPost {
   title: string;
@@ -16,8 +14,8 @@ interface CryptoPanicResponse {
 }
 
 export async function fetchCryptoPanicNews(maxAgeHours = 24): Promise<RssFeedItem[]> {
-  const token = process.env.CRYPTOPANIC_TOKEN;
-  if (!token) return []; // silently skip if not configured
+  const token = env.CRYPTOPANIC_TOKEN;
+  if (!token) return [];
 
   const cutoff = Date.now() - maxAgeHours * 3_600_000;
   const url = new URL('https://cryptopanic.com/api/free/v1/posts/');
