@@ -258,15 +258,15 @@ export async function runPredictionScan(): Promise<{
   withEdge: number;
 }> {
   // Pull from both exchanges in parallel
-  // Local dev: 10 Polymarket + 5 Kalshi = 15 total (~2 min scan)
+  // Local dev: 4 Polymarket + 1 Kalshi = 5 total (~45 sec scan)
   // On VPS bump these back up to 30 + 15 = 45 for full coverage
   const [polyMarkets, kalshiMarkets] = await Promise.all([
-    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90, limit: 10 }),
-    fetchKalshiMarkets({ minVolume: 5_000,  maxDaysLeft: 90, limit: 5  }),
+    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90, limit: 4 }),
+    fetchKalshiMarkets({ minVolume: 5_000,  maxDaysLeft: 90, limit: 1 }),
   ]);
 
-  // Merge, cap at 15
-  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 15);
+  // Merge, cap at 5
+  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 5);
 
   // Top 1 gets MiroFish (skip during local dev — Docker not running)
   const [top1, ...rest] = markets;
