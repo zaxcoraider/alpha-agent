@@ -257,42 +257,35 @@ export async function runPredictionScan(): Promise<{
   scanned: number;
   withEdge: number;
 }> {
-  // Pull from both exchanges in parallel — Kalshi has lower volume so lower threshold
+  // Pull from both exchanges in parallel
+  // Local dev: 10 Polymarket + 5 Kalshi = 15 total (~2 min scan)
+  // On VPS bump these back up to 30 + 15 = 45 for full coverage
   const [polyMarkets, kalshiMarkets] = await Promise.all([
-    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90 }),
-    fetchKalshiMarkets({ minVolume: 5_000, maxDaysLeft: 90, limit: 15 }),
+    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90, limit: 10 }),
+    fetchKalshiMarkets({ minVolume: 5_000,  maxDaysLeft: 90, limit: 5  }),
   ]);
 
-  // Merge: Polymarket first (higher volume), then Kalshi; cap at 40 total
-  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 40);
+  // Merge, cap at 15
+  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 15);
 
-  // Top 3 highest-volume markets get the full MiroFish swarm treatment.
-  // We run MiroFish in parallel while the ensemble runs — they share the context.
-  const top3 = markets.slice(0, 3);
-  const rest  = markets.slice(3);
+  // Top 1 gets MiroFish (skip during local dev — Docker not running)
+  const [top1, ...rest] = markets;
 
-  // Kick off MiroFish for top 3 simultaneously (each runs its own pipeline)
-  // Pass an empty contextBlock here — analyseMarket will build the real context
-  const miroFishPromises = top3.map((m) =>
-    runMiroFishAnalysis(m, `Question: ${m.question}`).catch(() => null),
-  );
-
-  // Run ensemble on ALL markets in batches of 2
-  const miroFishReports = await Promise.all(miroFishPromises);
+  const miroFishReport = top1
+    ? await runMiroFishAnalysis(top1, `Question: ${top1.question}`).catch(() => null)
+    : null;
 
   const predictions: Prediction[] = [];
 
-  // Top 3: run ensemble WITH MiroFish reports
-  const top3Results = await Promise.allSettled(
-    top3.map((m, i) => analyseMarket(m, miroFishReports[i])),
-  );
-  for (const r of top3Results) {
-    if (r.status === 'fulfilled') predictions.push(r.value);
+  // Top 1 with MiroFish
+  if (top1) {
+    const r = await analyseMarket(top1, miroFishReport).catch(() => null);
+    if (r) predictions.push(r);
   }
 
-  // Remaining: standard 10-analyst ensemble
-  for (let i = 0; i < rest.length; i += 2) {
-    const batch = rest.slice(i, i + 2);
+  // Remaining in batches of 5 (faster than batches of 2)
+  for (let i = 0; i < rest.length; i += 5) {
+    const batch = rest.slice(i, i + 5);
     const results = await Promise.allSettled(batch.map((m) => analyseMarket(m, null)));
     for (const r of results) {
       if (r.status === 'fulfilled') predictions.push(r.value);
