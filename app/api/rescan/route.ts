@@ -6,6 +6,7 @@ const AGENT_EVENTS: Record<string, string> = {
   news:       'agent/news.run',
   dev_events: 'agent/dev-events.run',
   nft_mints:  'agent/nft-mints.run',
+  memes:      'agent/memes.run',
 };
 
 export async function POST(req: Request) {
