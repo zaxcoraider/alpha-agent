@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Sunrise, Newspaper, Gem, Lightbulb, TrendingUp,
-  Twitter, Code2, BarChart2, MessageSquare, Zap,
+  Twitter, Code2, BarChart2, MessageSquare, Zap, LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -90,12 +90,22 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Status footer */}
-      <div className="border-t border-border px-4 py-3">
+      {/* Footer */}
+      <div className="border-t border-border px-4 py-3 space-y-2">
         <div className="flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse-dot shrink-0" />
           <span className="text-xs text-muted-foreground">Live · DGrid connected</span>
         </div>
+        <button
+          onClick={async () => {
+            await fetch('/api/auth', { method: 'DELETE' });
+            window.location.href = '/login';
+          }}
+          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-muted-foreground/50 hover:text-red-400 hover:bg-red-500/5 transition-all"
+        >
+          <LogOut size={12} />
+          <span>Sign out</span>
+        </button>
       </div>
     </aside>
   );

@@ -19,3 +19,6 @@ drizzle/
 
 # local memory / personal notes
 memory/
+
+# local planning file — not for GitHub
+tab-plans.md
