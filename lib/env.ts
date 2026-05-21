@@ -5,6 +5,7 @@ const envSchema = z.object({
   DGRID_BASE_URL: z.string().url(),
   DATABASE_URL: z.string().min(1),
   TAVILY_API_KEY: z.string().optional(),
+  RESERVOIR_API_KEY: z.string().optional(),
   CRYPTOPANIC_TOKEN: z.string().optional(),
   TWITTERAPI_IO_KEY: z.string().optional(),
   ZEP_API_KEY: z.string().optional(),
