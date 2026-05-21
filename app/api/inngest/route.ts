@@ -8,8 +8,9 @@ import { telegramPoll } from '@/inngest/functions/telegram-poll';
 import { devEventsScan } from '@/inngest/functions/dev-events-scan';
 import { nftMintsScan } from '@/inngest/functions/nft-mints-scan';
 import { memesScan } from '@/inngest/functions/memes-scan';
+import { xEventsScan } from '@/inngest/functions/x-events-scan';
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [morningScan, predictionScan, newsScan, customPredict, telegramPoll, devEventsScan, nftMintsScan, memesScan],
+  functions: [morningScan, predictionScan, newsScan, customPredict, telegramPoll, devEventsScan, nftMintsScan, memesScan, xEventsScan],
 });
