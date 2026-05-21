@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server';
 
 const AGENT_EVENTS: Record<string, string> = {
   prediction: 'agent/prediction.run',
-  news: 'agent/news.run',
+  news:       'agent/news.run',
+  dev_events: 'agent/dev-events.run',
 };
 
 export async function POST(req: Request) {
