@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createHash } from 'crypto';
 
 const COOKIE_NAME = 'alpha_auth';
 
@@ -13,11 +12,16 @@ const PUBLIC_PREFIXES = [
   '/favicon.ico',
 ];
 
-function tokenHash(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
+// Use Web Crypto API — Edge runtime doesn't support Node.js 'crypto' module
+async function tokenHash(token: string): Promise<string> {
+  const data = new TextEncoder().encode(token);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public paths through
@@ -33,7 +37,7 @@ export function middleware(request: NextRequest) {
   }
 
   const cookie = request.cookies.get(COOKIE_NAME);
-  const expectedHash = tokenHash(accessToken);
+  const expectedHash = await tokenHash(accessToken);
 
   if (cookie?.value === expectedHash) {
     return NextResponse.next();
