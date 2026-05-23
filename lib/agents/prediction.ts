@@ -115,6 +115,7 @@ async function runAnalyst(
     const { object } = await generateObject({
       model: dgrid(AGENT_MODELS.prediction_analyst),
       schema: AnalystSchema,
+      mode: 'json',
       abortSignal: AbortSignal.timeout(25_000),
       prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
 
@@ -184,6 +185,7 @@ ${miroFish?.report ? `\nSwarm report excerpt:\n${miroFish.report.slice(0, 800)}`
   const { object } = await generateObject({
     model:       dgrid(AGENT_MODELS.prediction_aggregator),
     schema:      AggregatorSchema,
+    mode:        'json',
     abortSignal: AbortSignal.timeout(35_000),
     prompt: `You are the Chief Analyst synthesizing two independent signals for a prediction market:
 1. A ${opinions.length}-member specialist analyst ensemble

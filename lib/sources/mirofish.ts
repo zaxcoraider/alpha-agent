@@ -107,6 +107,7 @@ async function generateStakeholders(question: string, targetCount: number): Prom
       const { object } = await generateObject({
         model:       dgrid(MODELS.classifier),
         schema:      StakeholderSchema,
+        mode:        'json',
         abortSignal: AbortSignal.timeout(60_000),
         prompt: `Generate exactly ${thisBatch} named, real-world stakeholders (batch ${b + 1}/${batches}) with VARIED opinions on:
 
