@@ -7,7 +7,7 @@ interface PolymarketChildMarket {
   question: string;
   description: string;
   outcomes: string[];
-  outcomePrices: string[];  // ["0.65", "0.35"] — index 0 = YES price
+  outcomePrices: string[] | string;  // API returns JSON-encoded string e.g. "[\"0.65\",\"0.35\"]"
   volume: string;
   volumeNum: number;
   liquidity: string;
@@ -25,6 +25,13 @@ interface PolymarketEvent {
   active: boolean;
   closed: boolean;
   markets: PolymarketChildMarket[];
+}
+
+// The gamma API returns outcomePrices as a JSON-encoded string, not a real array
+function parsePrices(raw: string[] | string | undefined): string[] | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw.length === 2 ? raw : null;
+  try { const p = JSON.parse(raw); return Array.isArray(p) && p.length === 2 ? p : null; } catch { return null; }
 }
 
 // ─── Public types ─────────────────────────────────────────────────────────────
@@ -55,19 +62,20 @@ export async function fetchMarketBySlug(slug: string): Promise<ParsedMarket | nu
 
     const now = Date.now();
     for (const m of event.markets ?? []) {
-      if (!m.outcomePrices || m.outcomePrices.length !== 2) continue;
+      const prices = parsePrices(m.outcomePrices);
+      if (!prices) continue;
       if (!m.active || m.closed) continue;
       const endDate = m.endDate ?? event.endDate;
       if (!endDate) continue;
       const daysLeft = (new Date(endDate).getTime() - now) / 86_400_000;
       if (daysLeft < 0) continue;
-      const yesPrice = parseFloat(m.outcomePrices[0] ?? '0.5');
+      const yesPrice = parseFloat(prices[0] ?? '0.5');
       return {
         id: m.id,
         question: m.question,
         description: m.description ?? event.description ?? '',
         yesPrice,
-        noPrice: parseFloat(m.outcomePrices[1] ?? String(1 - yesPrice)),
+        noPrice: parseFloat(prices[1] ?? String(1 - yesPrice)),
         volumeUsd: m.volumeNum ?? parseFloat(m.volume ?? '0'),
         liquidityUsd: m.liquidityNum ?? parseFloat(m.liquidity ?? '0'),
         endDate,
@@ -117,7 +125,8 @@ export async function fetchActiveMarkets(opts?: {
       if (results.length >= limit) break outer;
 
       // Only binary YES/NO
-      if (!m.outcomePrices || m.outcomePrices.length !== 2) continue;
+      const prices = parsePrices(m.outcomePrices);
+      if (!prices) continue;
       if (!m.active || m.closed) continue;
 
       const endDate = m.endDate ?? event.endDate;
@@ -130,7 +139,7 @@ export async function fetchActiveMarkets(opts?: {
       const volumeUsd = m.volumeNum ?? parseFloat(m.volume ?? '0');
       if (volumeUsd < minVolume) continue;
 
-      const yesPrice = parseFloat(m.outcomePrices[0] ?? '0.5');
+      const yesPrice = parseFloat(prices[0] ?? '0.5');
       // Skip effectively-resolved markets (≤1% or ≥99%) — no edge possible
       if (yesPrice <= 0.01 || yesPrice >= 0.99) continue;
 
@@ -139,7 +148,7 @@ export async function fetchActiveMarkets(opts?: {
         question: m.question,
         description: m.description ?? event.description ?? '',
         yesPrice,
-        noPrice: parseFloat(m.outcomePrices[1] ?? String(1 - yesPrice)),
+        noPrice: parseFloat(prices[1] ?? String(1 - yesPrice)),
         volumeUsd,
         liquidityUsd: m.liquidityNum ?? parseFloat(m.liquidity ?? '0'),
         endDate,
