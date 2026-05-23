@@ -398,7 +398,7 @@ async function pollAndInterview(simId: string, question: string, maxRounds: numb
     const d            = status.data;
     const currentRound = d?.current_round ?? 0;
     const simStatus    = d?.status ?? '';
-    const totalRounds  = d?.total_rounds ?? SIM_MAX_ROUNDS;
+    const totalRounds  = d?.total_rounds ?? maxRounds;
 
     // Fire interview at 60% of rounds — sim is still running, IPC is alive
     if (!interviewed && currentRound >= interviewAtRound) {
