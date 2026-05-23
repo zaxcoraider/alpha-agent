@@ -42,7 +42,7 @@ export type ModelId  = (typeof MODELS)[ModelKey];
 // Reasoning/synthesis tasks get Opus. Live social signals use Grok.
 export const AGENT_MODELS: Record<string, string> = {
   // Prediction Tab
-  prediction_analyst:    MODELS.analyst,     // 10 parallel generateObject — terminus works with mode:json
+  prediction_analyst:    MODELS.classifier,  // 10 parallel generateObject — v3.2 direct routing (terminus → Bedrock rejects temperature)
   prediction_aggregator: MODELS.reasoner,    // Chief Analyst — Opus 4.7, best synthesizer
   prediction_social:     MODELS.grok,        // live X/Twitter signal
 
