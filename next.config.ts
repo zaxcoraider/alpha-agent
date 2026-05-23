@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: [
         'localhost:3000',
-        '*.vercel.app',
+        'crypto-plantir.vercel.app',
       ],
     },
   },
