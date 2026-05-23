@@ -138,7 +138,8 @@ Output:
     });
 
     return { ...object, role };
-  } catch {
+  } catch (err) {
+    console.error(`[analyst:${role}] failed:`, err);
     return null;
   }
 }
