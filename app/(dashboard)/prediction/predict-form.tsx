@@ -56,11 +56,14 @@ export function PredictForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: trimmed, depth }),
       });
-      if (!res.ok) throw new Error('Request failed');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `Server error ${res.status}`);
+      }
       const data = await res.json() as { jobId: string; question: string; isRealMarket: boolean };
       setState({ phase: 'polling', ...data, depth });
-    } catch {
-      setState({ phase: 'error', message: 'Failed to start. Is Inngest running?' });
+    } catch (err) {
+      setState({ phase: 'error', message: String(err instanceof Error ? err.message : err) });
     }
   }
 
