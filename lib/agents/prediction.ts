@@ -5,7 +5,7 @@ import { AGENT_MODELS } from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
 import { fetchKalshiMarkets } from '@/lib/sources/kalshi';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
-import { runMiroFishAnalysis } from '@/lib/sources/mirofish';
+import { runMiroFishAnalysis, type MiroFishResult } from '@/lib/sources/mirofish';
 
 // ─── Final output schema (stored in DB) ──────────────────────────────────────
 
@@ -29,7 +29,10 @@ export const PredictionSchema = z.object({
     confidence: z.number(),
     headline: z.string(),
   })).optional(),
-  miroFishEnhanced: z.boolean().optional(), // true if MiroFish swarm ran for this market
+  miroFishEnhanced: z.boolean().optional(),
+  miroFishAgentCount: z.number().optional(),
+  miroFishMeanProb: z.number().min(0).max(1).optional(),
+  miroFishStdDev: z.number().min(0).max(1).optional(),
   source: z.enum(['polymarket', 'kalshi', 'metaculus']).optional(),
 });
 
@@ -146,7 +149,7 @@ async function aggregateOpinions(
   market: ParsedMarket,
   opinions: AnalystOpinion[],
   contextBlock: string,
-  miroFishReport: string | null,
+  miroFish: MiroFishResult | null,
 ): Promise<z.infer<typeof AggregatorSchema>> {
   const panel = opinions
     .map((o) =>
@@ -154,15 +157,36 @@ async function aggregateOpinions(
     )
     .join('\n');
 
-  const miroSection = miroFishReport
-    ? `\n━━━ MIROFISH SWARM SIMULATION (hundreds of agents, emergent consensus) ━━━\n${miroFishReport.slice(0, 1200)}\n`
-    : '';
+  // Build the MiroFish section — swarm stats are the quantitative signal, report is the narrative
+  let miroSection = '';
+  const sw = miroFish?.swarmStats;
+  if (sw && sw.sampleSize >= 3) {
+    const bullPct  = sw.agentCount > 0 ? ((sw.bullCount / sw.sampleSize) * 100).toFixed(0) : '?';
+    const bearPct  = sw.agentCount > 0 ? ((sw.bearCount / sw.sampleSize) * 100).toFixed(0) : '?';
+    miroSection = `
+━━━ MIROFISH SWARM (${sw.agentCount} agents, ${sw.sampleSize} interviewed, ${SIM_ROUNDS} social simulation rounds) ━━━
+Swarm mean probability:   ${(sw.meanProb * 100).toFixed(1)}%
+Swarm median:             ${(sw.medianProb * 100).toFixed(1)}%
+Disagreement (std dev):   ±${(sw.stdDev * 100).toFixed(1)}%  ${sw.stdDev > 0.2 ? '⚠ HIGH — agents strongly divided' : '✓ agents broadly aligned'}
+Sentiment split:          ${bullPct}% bulls (>60%) | ${100 - Number(bullPct) - Number(bearPct)}% neutral | ${bearPct}% bears (<40%)
+Market price vs swarm:    market=${(market.yesPrice * 100).toFixed(1)}% | swarm=${(sw.meanProb * 100).toFixed(1)}% | edge=${((sw.meanProb - market.yesPrice) * 100).toFixed(1)}%
+
+Top bull case: ${sw.topBullResponse || 'N/A'}
+Top bear case: ${sw.topBearResponse || 'N/A'}
+${miroFish?.report ? `\nSwarm report excerpt:\n${miroFish.report.slice(0, 800)}` : ''}`;
+  } else if (miroFish?.report) {
+    miroSection = `\n━━━ MIROFISH SWARM REPORT ━━━\n${miroFish.report.slice(0, 1200)}\n`;
+  }
+
+  const hasSwarm = sw && sw.sampleSize >= 3;
 
   const { object } = await generateObject({
-    model: dgrid(AGENT_MODELS.prediction_aggregator),
-    schema: AggregatorSchema,
-    abortSignal: AbortSignal.timeout(30_000),
-    prompt: `You are the Chief Analyst aggregating a ${opinions.length}-member specialist ensemble for a prediction market.${miroFishReport ? ' You also have a MiroFish swarm simulation report from hundreds of emergent agents.' : ''}
+    model:       dgrid(AGENT_MODELS.prediction_aggregator),
+    schema:      AggregatorSchema,
+    abortSignal: AbortSignal.timeout(35_000),
+    prompt: `You are the Chief Analyst synthesizing two independent signals for a prediction market:
+1. A ${opinions.length}-member specialist analyst ensemble
+${hasSwarm ? `2. A MiroFish swarm of ${sw!.agentCount} AI agents who debated this question in a social simulation` : ''}
 
 MARKET: ${market.question}
 Market Implied Probability (YES): ${(market.yesPrice * 100).toFixed(1)}%
@@ -173,32 +197,42 @@ ${miroSection}
 ANALYST PANEL:
 ${panel}
 
-TASK:
-1. Compute a confidence-weighted consensus probability (weight each analyst's estimate by their stated confidence)
-2. Identify where analysts agree vs. sharply diverge — high divergence lowers consensus confidence
-3. Synthesize the 3-5 most important evidence points from across the panel AND the live context
+SYNTHESIS TASK:
+1. Compute a confidence-weighted consensus probability
+   - Weight each analyst by their stated confidence
+   ${hasSwarm ? `- The swarm mean of ${(sw!.meanProb * 100).toFixed(1)}% is an independent signal from ${sw!.sampleSize} agents — treat it like a ${sw!.sampleSize}-person crowd forecast and weight it heavily` : ''}
+   ${hasSwarm && sw!.stdDev > 0.2 ? `- High swarm std dev (±${(sw!.stdDev * 100).toFixed(1)}%) signals genuine uncertainty — lower your confidence accordingly` : ''}
+2. Identify where the analyst panel and swarm agree vs. diverge — convergence = higher confidence
+3. Synthesize 3-5 most important evidence points from the panel AND live context
 4. Write a tight 2-4 sentence investment thesis grounded in the strongest signals
 
 Calibration rules:
-- If analysts are highly split (>20% spread), lower confidence to reflect genuine uncertainty
-- Do NOT over-anchor to the market price — the ensemble exists to find disagreement with it
+- Do NOT over-anchor to market price — the ensemble exists to find edge against it
+- If the swarm and analyst panel disagree by >10%, explain why one signal dominates
 - Cite specific facts from the live context where they support the thesis`,
   });
 
   return object;
 }
 
+// Round constant for the prompt (must stay in sync with mirofish.ts SIM_MAX_ROUNDS)
+const SIM_ROUNDS = 30;
+
 // ─── Full ensemble for one market ────────────────────────────────────────────
 
 export async function analyseMarket(
   market: ParsedMarket,
-  miroFishReport: string | null = null,
+  miroFish: MiroFishResult | null = null,
+  prebuiltContext?: string,  // pass when runPredictionScan already fetched context for MiroFish
 ): Promise<Prediction> {
-  // Step 1: fetch live context (all sources in parallel inside buildPredictionContext)
-  const ctx = await buildPredictionContext(market.question).catch(() => null);
-  const contextBlock = ctx
-    ? formatContextBlock(ctx)
-    : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
+  // Step 1: fetch live context, or reuse pre-built to avoid double-fetch
+  let contextBlock = prebuiltContext ?? '';
+  if (!contextBlock) {
+    const ctx = await buildPredictionContext(market.question).catch(() => null);
+    contextBlock = ctx
+      ? formatContextBlock(ctx)
+      : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
+  }
 
   // Step 2: run all 10 analysts in parallel with the context
   const analystResults = await Promise.allSettled(
@@ -216,8 +250,8 @@ export async function analyseMarket(
     throw new Error(`All analysts failed for market ${market.id}`);
   }
 
-  // Step 3: Aggregate — inject MiroFish swarm report if available (claude-opus-4.7)
-  const agg = await aggregateOpinions(market, opinions, contextBlock, miroFishReport);
+  // Step 3: Aggregate with Opus 4.7 — uses analyst panel + MiroFish swarm stats
+  const agg = await aggregateOpinions(market, opinions, contextBlock, miroFish);
 
   const edge = Math.abs(agg.consensusProb - market.yesPrice);
   const recommendedSide =
@@ -227,27 +261,32 @@ export async function analyseMarket(
       ? 'YES'
       : 'NO';
 
+  const sw = miroFish?.swarmStats;
+
   return {
-    marketId: market.id,
-    question: market.question,
-    marketProb: market.yesPrice,
-    yourProb: agg.consensusProb,
+    marketId:    market.id,
+    question:    market.question,
+    marketProb:  market.yesPrice,
+    yourProb:    agg.consensusProb,
     edge,
     recommendedSide,
-    confidence: agg.confidence,
+    confidence:  agg.confidence,
     keyEvidence: agg.keyEvidence,
-    reasoning: agg.reasoning,
-    volumeUsd: market.volumeUsd,
-    endDate: market.endDate,
-    daysLeft: market.daysLeft,
+    reasoning:   agg.reasoning,
+    volumeUsd:   market.volumeUsd,
+    endDate:     market.endDate,
+    daysLeft:    market.daysLeft,
     analystCount: opinions.length,
-    miroFishEnhanced: miroFishReport !== null,
-    source: market.source,
+    miroFishEnhanced:   miroFish !== null && (sw !== null || miroFish.report !== null),
+    miroFishAgentCount: sw?.agentCount,
+    miroFishMeanProb:   sw?.meanProb,
+    miroFishStdDev:     sw?.stdDev,
+    source:      market.source,
     analystBreakdown: opinions.map((o) => ({
-      role: o.role,
-      yourProb: o.yourProb,
+      role:      o.role,
+      yourProb:  o.yourProb,
       confidence: o.confidence,
-      headline: o.headline,
+      headline:  o.headline,
     })),
   };
 }
@@ -260,34 +299,34 @@ export async function runPredictionScan(): Promise<{
   withEdge: number;
 }> {
   // Pull from both exchanges in parallel
-  // Local dev: 4 Polymarket + 1 Kalshi = 5 total (~45 sec scan)
-  // On VPS bump these back up to 30 + 15 = 45 for full coverage
+  // Production (VPS): 30 Polymarket + 15 Kalshi = 45 markets
   const [polyMarkets, kalshiMarkets] = await Promise.all([
-    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90, limit: 4 }),
-    fetchKalshiMarkets({ minVolume: 5_000,  maxDaysLeft: 90, limit: 1 }),
+    fetchActiveMarkets({ minVolume: 50_000, maxDaysLeft: 90, limit: 30 }),
+    fetchKalshiMarkets({ minVolume: 5_000,  maxDaysLeft: 90, limit: 15 }),
   ]);
 
-  // Merge, cap at 5
-  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 5);
+  const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 45);
 
-  // Top 1 gets MiroFish (skip during local dev — Docker not running)
-  const [top1, ...rest] = markets;
-
-  const miroFishReport = top1
-    ? await runMiroFishAnalysis(top1, `Question: ${top1.question}`).catch(() => null)
-    : null;
+  // Top 3 markets get the full MiroFish swarm pipeline (runs sequentially — each takes ~15-20 min)
+  // Remaining markets get the 10-analyst ensemble only
+  const miroFishMarkets = markets.slice(0, 3);
+  const rest            = markets.slice(3);
 
   const predictions: Prediction[] = [];
 
-  // Top 1 with MiroFish
-  if (top1) {
-    const r = await analyseMarket(top1, miroFishReport).catch(() => null);
+  // Run MiroFish sequentially for top 3 (parallel would overwhelm VPS + Zep)
+  for (const m of miroFishMarkets) {
+    // Build context first so we can pass it to both MiroFish and the analyst ensemble
+    const ctx          = await buildPredictionContext(m.question).catch(() => null);
+    const contextBlock = ctx ? formatContextBlock(ctx) : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
+    const miroFish     = await runMiroFishAnalysis(m, contextBlock).catch(() => null);
+    const r            = await analyseMarket(m, miroFish, contextBlock).catch(() => null);
     if (r) predictions.push(r);
   }
 
-  // Remaining in batches of 5 (faster than batches of 2)
+  // Remaining in batches of 5
   for (let i = 0; i < rest.length; i += 5) {
-    const batch = rest.slice(i, i + 5);
+    const batch   = rest.slice(i, i + 5);
     const results = await Promise.allSettled(batch.map((m) => analyseMarket(m, null)));
     for (const r of results) {
       if (r.status === 'fulfilled') predictions.push(r.value);

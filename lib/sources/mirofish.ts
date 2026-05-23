@@ -1,31 +1,56 @@
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { dgrid } from '@/lib/llm/client';
+import { MODELS } from '@/lib/llm/models';
 import { env } from '@/lib/env';
 import type { ParsedMarket } from './polymarket';
 
-// ─── MiroFish REST API client ─────────────────────────────────────────────────
-// Full async pipeline: seed → ontology → graph → simulation → report
-// Returns a report string, or null if MiroFish is unavailable or times out.
-// All steps have individual timeouts; the whole pipeline caps at 10 minutes.
+// ─── Result types ─────────────────────────────────────────────────────────────
 
-const PIPELINE_TIMEOUT_MS = 10 * 60 * 1000; // 10 min hard cap
-const POLL_INTERVAL_MS = 8_000;              // poll every 8 seconds
+export type SwarmStats = {
+  agentCount: number;      // total agents prepared (from expected_entities_count)
+  sampleSize: number;      // agents who gave a parseable probability
+  meanProb: number;        // 0-1 mean probability across all interviewed agents
+  medianProb: number;      // 0-1 median
+  stdDev: number;          // 0-1 — high = agents strongly disagree
+  bullCount: number;       // agents estimating > 60%
+  bearCount: number;       // agents estimating < 40%
+  neutralCount: number;    // agents estimating 40–60%
+  topBullResponse: string; // most bullish agent's verbatim response
+  topBearResponse: string; // most bearish agent's verbatim response
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+export type MiroFishResult = {
+  report: string | null;
+  swarmStats: SwarmStats | null;
+};
+
+// ─── Config ───────────────────────────────────────────────────────────────────
+
+// 20 min — covers: stakeholders + ontology + graph + prepare(80 agents) + sim(30 rounds) + interview + report
+const PIPELINE_TIMEOUT_MS = 20 * 60 * 1000;
+const POLL_INTERVAL_MS    = 8_000;
+const SIM_MAX_ROUNDS      = 30;
+
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
 
 function base(path: string): string {
   return `${env.MIROFISH_URL}${path}`;
 }
 
-async function mfetch(path: string, init: RequestInit): Promise<unknown> {
+// timeoutMs is per-request; interview/all needs much longer than other calls
+async function mfetch(path: string, init: RequestInit, timeoutMs = 45_000): Promise<unknown> {
   const res = await fetch(base(path), {
     ...init,
-    headers: {
-      ...(init.headers ?? {}),
-      Accept: 'application/json',
-    },
-    signal: AbortSignal.timeout(30_000), // 30s per individual request
+    headers: { ...(init.headers ?? {}), Accept: 'application/json' },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!res.ok) throw new Error(`MiroFish ${path} → HTTP ${res.status}`);
   return res.json();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function poll(
@@ -36,211 +61,432 @@ async function poll(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await checkFn()) return true;
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await sleep(intervalMs);
   }
   return false;
 }
 
-// ─── Seed document ────────────────────────────────────────────────────────────
+// ─── Step 0: Generate named stakeholders ──────────────────────────────────────
+// This is the agent-count lever.
+// Zep builds entity nodes from the seed document — each named entity becomes a node,
+// each node becomes an agent persona. A thin seed yields ~10-20 agents. A seed with
+// 80-120 named ecosystem participants yields 60-150 agents.
 
-function buildSeedDoc(market: ParsedMarket, contextBlock: string): string {
-  return `# Prediction Market Analysis Seed
+const StakeholderSchema = z.object({
+  stakeholders: z.array(
+    z.object({
+      name:    z.string(),
+      role:    z.string().max(60),
+      stance:  z.enum(['bullish', 'bearish', 'neutral']),
+      note:    z.string().max(100),
+    }),
+  ).min(60).max(120),
+});
 
-## Market Question
+async function generateStakeholders(question: string): Promise<string> {
+  try {
+    const { object } = await generateObject({
+      model:       dgrid(MODELS.classifier),   // DeepSeek V3.2 — cheap + fast enough
+      schema:      StakeholderSchema,
+      abortSignal: AbortSignal.timeout(35_000),
+      prompt: `Generate 80-120 named, real-world stakeholders who would have strong and VARIED opinions about this prediction market question:
+
+"${question}"
+
+Include a realistic mix (not all bullish):
+- Named crypto traders, whales, and degens (e.g. prominent CT accounts, anonymous wallets)
+- Institutional desks: Galaxy Digital, Paradigm, a16z, Grayscale, BlackRock crypto desk
+- Named analysts and researchers: TradFi crossovers, on-chain specialists
+- Protocol founders and teams relevant to the topic
+- Exchanges and market makers: Binance, Coinbase, Kraken, Jump Trading, Wintermute
+- Media personalities: Bloomberg Crypto reporters, Decrypt, CoinDesk, Bankless
+- Skeptics and bears: Peter Schiff-style critics, regulatory hawks, academics who doubt crypto
+- On-chain analytics: Glassnode, Nansen, CryptoQuant, Santiment analysts
+- Retail community members: Reddit r/CryptoCurrency, Twitter degen communities
+- Government / regulatory bodies if relevant
+
+Use real names for named individuals. Spread stances realistically — bears and skeptics make the simulation richer.`,
+    });
+
+    const lines = object.stakeholders
+      .map((s) => `- ${s.name} | ${s.role} | ${s.stance} | ${s.note}`)
+      .join('\n');
+
+    return `## Ecosystem Participants (${object.stakeholders.length} named entities)\n\n${lines}`;
+  } catch {
+    // Non-fatal — simulation will proceed with a thinner seed (fewer agents)
+    return '';
+  }
+}
+
+// ─── Step 1: Rich seed document ───────────────────────────────────────────────
+// The ontology generator reads this and creates 10 entity TYPES (hardcoded in MiroFish).
+// The graph builder ingests the text and creates individual entity NODES for each named entity.
+// More named entities in the seed = more nodes = more agents.
+
+function buildRichSeedDoc(
+  market: ParsedMarket,
+  contextBlock: string,
+  stakeholdersSection: string,
+): string {
+  return `# Prediction Market Intelligence Seed
+
+## Core Question
 ${market.question}
 
 ## Market Data
-- Current YES probability: ${(market.yesPrice * 100).toFixed(1)}%
+- Current YES probability (market consensus): ${(market.yesPrice * 100).toFixed(1)}%
 - Trading volume: $${(market.volumeUsd / 1_000_000).toFixed(2)}M
-- Liquidity: $${(market.liquidityUsd / 1000).toFixed(0)}k
-- Resolves: ${market.endDate} (${market.daysLeft} days)
-- Description: ${market.description?.slice(0, 400) || 'N/A'}
+- Liquidity depth: $${(market.liquidityUsd / 1_000).toFixed(0)}k
+- Resolves: ${market.endDate} (${market.daysLeft} days remaining)
+- Description: ${market.description?.slice(0, 600) || 'N/A'}
 
-## Live Market Intelligence
+## Live Market Intelligence (last 24-48h)
 ${contextBlock}
 
----
+${stakeholdersSection}
 
-## Simulation Requirement
-Create a diverse community of agents who hold strong, varied opinions about the likely resolution of this prediction market question. The community should include:
-- Institutional and retail prediction market traders with different risk appetites
-- Domain experts directly relevant to the market topic
-- Contrarian thinkers who challenge consensus views
-- News-driven actors who react to recent headlines
-- Quantitative analysts focused on base rates and historical patterns
-- Social media influencers who drive narrative momentum
-- Skeptics who distrust current market pricing
+## Simulation Directive
 
-Agents should debate, post, react, and form coalitions organically. The simulation should surface emergent consensus about the true probability of YES resolution, especially where it diverges from the current market price of ${(market.yesPrice * 100).toFixed(1)}%.`;
+Create a high-fidelity social simulation of the crypto prediction market community debating the above question.
+Each named participant above should become an agent with a distinct persona shaped by their role and stance.
+
+**Required agent diversity:**
+- Institutional traders: fund managers, prop desks, ETF issuers with macro frameworks
+- Retail degens: CT influencers, discord communities, anonymous high-conviction traders
+- Quantitative analysts: probability model builders, base-rate anchors, statistical thinkers
+- Fundamentals analysts: protocol researchers, developer activity trackers, TVL watchers
+- Macro economists: TradFi crossovers, rate cycle watchers, global liquidity analysts
+- Contrarians and bears: skeptics, regulatory hawks, academics critical of crypto
+- Media personalities: journalists, podcast hosts, newsletter writers who shape narrative
+- On-chain analysts: whale trackers, exchange flow specialists, derivatives data readers
+
+**Debate dynamics:**
+- Agents MUST reference the current market price of ${(market.yesPrice * 100).toFixed(1)}% and argue whether it is overpriced or underpriced
+- Agents should form coalitions, challenge each other, and update positions based on evidence
+- The simulation should surface where the true probability DIVERGES from market consensus
+- Heated disagreements between bears and bulls make the signal richer
+
+**The central question every agent must eventually answer:**
+What is the true probability that this prediction market resolves YES?
+Is the current market price of ${(market.yesPrice * 100).toFixed(1)}% too high, too low, or correct?`;
 }
 
-// ─── Step 1: Generate ontology from seed document ─────────────────────────────
+// ─── Step 2: Generate ontology ────────────────────────────────────────────────
+// MiroFish always generates exactly 10 entity types from the seed.
+// We write a strong simulation_requirement so those types are prediction-market-relevant.
 
-async function generateOntology(
-  seedText: string,
-  marketId: string,
-): Promise<string | null> {
+async function generateOntology(seedText: string, marketId: string): Promise<string | null> {
   const formData = new FormData();
-  const blob = new Blob([seedText], { type: 'text/markdown' });
-  formData.append('files', blob, 'market-seed.md');
+  formData.append('files', new Blob([seedText], { type: 'text/markdown' }), 'market-seed.md');
   formData.append('project_name', `alpha-${marketId}-${Date.now()}`);
   formData.append(
     'simulation_requirement',
-    'Generate diverse prediction market participant personas who debate market resolution probabilities.',
+    'Generate diverse crypto prediction market participant personas who vigorously debate market resolution probabilities. Entity types must cover: institutional traders, retail investors, domain experts, contrarians, quantitative analysts, media personalities, on-chain analysts, skeptics/bears, protocol teams, and market makers.',
   );
 
-  const res = await mfetch('/api/graph/ontology/generate', {
-    method: 'POST',
-    body: formData,
-  }) as { success: boolean; data?: { project_id: string } };
+  const res = await mfetch('/api/graph/ontology/generate', { method: 'POST', body: formData }) as {
+    success: boolean;
+    data?: { project_id: string };
+  };
 
   return res.success ? (res.data?.project_id ?? null) : null;
 }
 
-// ─── Step 2: Build knowledge graph ────────────────────────────────────────────
+// ─── Step 3: Build knowledge graph ────────────────────────────────────────────
+// Zep ingests text in 500-char chunks and extracts entity nodes matching the ontology.
+// Each node = one future agent. A 3000-word seed with 100 named entities → ~80-150 nodes.
 
 async function buildGraph(projectId: string): Promise<string | null> {
   const buildRes = await mfetch('/api/graph/build', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project_id: projectId }),
+    body:    JSON.stringify({ project_id: projectId }),
   }) as { success: boolean; data?: { task_id: string } };
 
   if (!buildRes.success || !buildRes.data?.task_id) return null;
   const taskId = buildRes.data.task_id;
 
-  // Poll for completion
   let graphId: string | null = null;
   const done = await poll(async () => {
-    const status = await mfetch(`/api/graph/task/${taskId}`, { method: 'GET' }) as {
+    const s = await mfetch(`/api/graph/task/${taskId}`, { method: 'GET' }) as {
       success: boolean;
       data?: { status: string; graph_id?: string };
     };
-    if (status.data?.status === 'completed' && status.data.graph_id) {
-      graphId = status.data.graph_id;
+    if (s.data?.status === 'completed' && s.data.graph_id) {
+      graphId = s.data.graph_id;
       return true;
     }
-    return status.data?.status === 'failed';
-  }, POLL_INTERVAL_MS, 2 * 60 * 1000);
+    return s.data?.status === 'failed';
+  }, POLL_INTERVAL_MS, 3 * 60 * 1000);
 
   return done ? graphId : null;
 }
 
-// ─── Step 3: Create + prepare + run simulation ─────────────────────────────────
+// ─── Step 4: Create + prepare + start simulation ───────────────────────────────
+// Prepare is the expensive step — it calls the LLM to generate a full persona for each
+// entity node. parallel_profile_count=20 means 20 concurrent LLM calls per batch.
+// The response includes expected_entities_count which tells us the true agent count.
 
-async function runSimulation(graphId: string): Promise<string | null> {
-  // Create
+async function initSimulation(
+  projectId: string,
+  graphId: string,
+): Promise<{ simId: string; agentCount: number } | null> {
+  // Create — project_id is required; the old code was missing it
   const createRes = await mfetch('/api/simulation/create', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      graph_id: graphId,
+    body:    JSON.stringify({
+      project_id:     projectId,
+      graph_id:       graphId,
       enable_twitter: true,
-      enable_reddit: true,
+      enable_reddit:  true,
     }),
   }) as { success: boolean; data?: { simulation_id: string } };
 
   if (!createRes.success) return null;
   const simId = createRes.data!.simulation_id;
 
-  // Prepare — generates agent personas from graph entities
+  // Prepare — generates OASIS agent profiles for every entity node in the graph
   const prepareRes = await mfetch('/api/simulation/prepare', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      simulation_id: simId,
-      use_llm_for_profiles: true,
-      parallel_profile_count: 8,
+    body:    JSON.stringify({
+      simulation_id:          simId,
+      use_llm_for_profiles:   true,
+      parallel_profile_count: 20,   // 20 concurrent persona generations per batch
     }),
-  }) as { success: boolean; data?: { task_id: string } };
+  }) as {
+    success: boolean;
+    data?: { task_id: string; expected_entities_count?: number };
+  };
 
   if (!prepareRes.success) return null;
-  const prepTaskId = prepareRes.data?.task_id;
+  const prepTaskId  = prepareRes.data?.task_id;
+  const agentCount  = prepareRes.data?.expected_entities_count ?? 0;
 
-  // Wait for prepare to complete
+  // Wait for all personas to be generated (batch size 15, so ceil(agentCount/15) LLM calls)
   const prepDone = await poll(async () => {
     const s = await mfetch('/api/simulation/prepare/status', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: prepTaskId }),
+      body:    JSON.stringify({ task_id: prepTaskId }),
     }) as { success: boolean; data?: { status: string } };
     return s.data?.status === 'completed' || s.data?.status === 'failed';
-  }, POLL_INTERVAL_MS, 3 * 60 * 1000);
+  }, POLL_INTERVAL_MS, 6 * 60 * 1000);  // 6 min for 80-120 agents
 
   if (!prepDone) return null;
 
-  // Start simulation — parallel Twitter + Reddit, 20 rounds
+  // Start — parallel Twitter + Reddit simulation
   const startRes = await mfetch('/api/simulation/start', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    body:    JSON.stringify({
       simulation_id: simId,
-      platform: 'parallel',
-      max_rounds: 20,
+      platform:      'parallel',
+      max_rounds:    SIM_MAX_ROUNDS,
     }),
   }) as { success: boolean };
 
   if (!startRes.success) return null;
 
-  // Poll until simulation finishes
-  const simDone = await poll(async () => {
-    const status = await mfetch(`/api/simulation/${simId}/run-status`, {
-      method: 'GET',
-    }) as { success: boolean; data?: { status?: string; current_round?: number; total_rounds?: number } };
-    const d = status.data;
-    return d?.status === 'completed' || d?.status === 'stopped' ||
-      (d?.current_round !== undefined && d?.total_rounds !== undefined &&
-        d.current_round >= d.total_rounds);
-  }, POLL_INTERVAL_MS * 2, 7 * 60 * 1000);
-
-  if (!simDone) {
-    // Stop gracefully if we're out of time
-    await mfetch('/api/simulation/stop', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ simulation_id: simId }),
-    }).catch(() => null);
-  }
-
-  return simId;
+  return { simId, agentCount };
 }
 
-// ─── Step 4: Generate report ──────────────────────────────────────────────────
+// ─── Step 5: Interview all agents mid-simulation ───────────────────────────────
+// The interview IPC system writes command files to ipc_commands/ inside the running
+// simulation process. The process must be alive (rounds still running) for this to work.
+// We fire the interview at the 60% mark so there are still ~10 rounds left as buffer.
+// Each agent gives one structured response with a probability estimate.
+
+type InterviewEntry = { agentId: number; response: string; platform: string };
+
+async function fireInterviewAll(simId: string, question: string): Promise<InterviewEntry[]> {
+  const prompt =
+    `You are participating in a social media simulation debating a prediction market question.
+
+Question: "${question}"
+
+Based on your character, expertise, and everything discussed in this simulation so far:
+
+1. What is YOUR probability estimate that this resolves YES? (Give a number 0-100)
+2. In one sentence, what is your strongest reason?
+
+You MUST respond in this exact format (required for data collection):
+PROBABILITY: [number]% - [one sentence reason]
+
+Example: "PROBABILITY: 67% - The institutional ETF inflows and macro tailwinds make this highly likely within the timeframe."`;
+
+  const res = await mfetch(
+    '/api/simulation/interview/all',
+    {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        simulation_id: simId,
+        prompt,
+        platform: 'twitter',  // single platform = one response per agent, simpler parsing
+        timeout:  180,
+      }),
+    },
+    260_000,  // 4+ min — all agents respond sequentially via IPC
+  ) as {
+    success: boolean;
+    data?: {
+      result?: {
+        results?: Record<string, { agent_id: number; response: string; platform: string }>;
+      };
+    };
+  };
+
+  if (!res.success || !res.data?.result?.results) return [];
+
+  return Object.values(res.data.result.results).map((r) => ({
+    agentId:  r.agent_id,
+    response: r.response,
+    platform: r.platform,
+  }));
+}
+
+// Poll the simulation run-status and fire interview once we reach the 60% mark.
+// Continues polling after interview until simulation fully completes.
+async function pollAndInterview(simId: string, question: string): Promise<InterviewEntry[]> {
+  const interviewAtRound = Math.floor(SIM_MAX_ROUNDS * 0.6); // round 18 of 30
+  let interviewed = false;
+  let interviews:  InterviewEntry[] = [];
+  const deadline   = Date.now() + 10 * 60 * 1000;  // 10 min window for sim + interview
+
+  while (Date.now() < deadline) {
+    const status = await mfetch(`/api/simulation/${simId}/run-status`, {
+      method: 'GET',
+    }) as {
+      success: boolean;
+      data?: { status?: string; current_round?: number; total_rounds?: number };
+    };
+
+    const d            = status.data;
+    const currentRound = d?.current_round ?? 0;
+    const simStatus    = d?.status ?? '';
+    const totalRounds  = d?.total_rounds ?? SIM_MAX_ROUNDS;
+
+    // Fire interview at 60% of rounds — sim is still running, IPC is alive
+    if (!interviewed && currentRound >= interviewAtRound) {
+      interviewed = true;
+      interviews  = await fireInterviewAll(simId, question).catch(() => []);
+    }
+
+    // Simulation finished naturally
+    if (
+      simStatus === 'completed' ||
+      simStatus === 'stopped'   ||
+      currentRound >= totalRounds
+    ) break;
+
+    await sleep(POLL_INTERVAL_MS);
+  }
+
+  // Safety: stop if still running and we timed out
+  if (!interviewed) {
+    // Never got to interview round — try a late interview before stopping
+    interviews = await fireInterviewAll(simId, question).catch(() => []);
+  }
+
+  return interviews;
+}
+
+// ─── Step 6: Parse swarm statistics from interview responses ───────────────────
+
+function extractProbability(text: string): number | null {
+  // Primary: structured "PROBABILITY: XX%"
+  const m = text.match(/PROBABILITY:\s*(\d+(?:\.\d+)?)\s*%/i);
+  if (m) {
+    const v = parseFloat(m[1]);
+    if (v >= 0 && v <= 100) return v / 100;
+  }
+  // Fallback: first percentage mentioned (e.g. "I'd say around 73%")
+  const fb = text.match(/\b(\d+(?:\.\d+)?)\s*%/);
+  if (fb) {
+    const v = parseFloat(fb[1]);
+    if (v >= 0 && v <= 100) return v / 100;
+  }
+  return null;
+}
+
+function computeSwarmStats(
+  interviews: InterviewEntry[],
+  agentCount: number,
+): SwarmStats | null {
+  if (interviews.length === 0) return null;
+
+  const parsed = interviews
+    .map((i) => ({ prob: extractProbability(i.response), response: i.response }))
+    .filter((x): x is { prob: number; response: string } => x.prob !== null);
+
+  if (parsed.length < 3) return null;
+
+  const vals   = parsed.map((x) => x.prob);
+  const sorted = [...vals].sort((a, b) => a - b);
+  const mean   = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const stdDev = Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length);
+
+  const bulls   = parsed.filter((x) => x.prob > 0.6).sort((a, b) => b.prob - a.prob);
+  const bears   = parsed.filter((x) => x.prob < 0.4).sort((a, b) => a.prob - b.prob);
+  const neutral = parsed.length - bulls.length - bears.length;
+
+  return {
+    agentCount,
+    sampleSize:      parsed.length,
+    meanProb:        mean,
+    medianProb:      median,
+    stdDev,
+    bullCount:       bulls.length,
+    bearCount:       bears.length,
+    neutralCount:    neutral,
+    topBullResponse: (bulls[0]?.response ?? '').slice(0, 240),
+    topBearResponse: (bears[0]?.response ?? '').slice(0, 240),
+  };
+}
+
+// ─── Step 7: Generate report ──────────────────────────────────────────────────
+// The ReACT report agent queries the Zep graph (InsightForge, Panorama Search)
+// and generates a structured markdown analysis. The correct field is markdown_content.
 
 async function generateReport(simId: string): Promise<string | null> {
   const genRes = await mfetch('/api/report/generate', {
-    method: 'POST',
+    method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ simulation_id: simId }),
+    body:    JSON.stringify({ simulation_id: simId }),
   }) as { success: boolean; data?: { report_id: string; task_id: string } };
 
   if (!genRes.success) return null;
   const { report_id: reportId, task_id: taskId } = genRes.data!;
 
-  // Wait for report to complete
+  // Poll until report is written to disk
   await poll(async () => {
     const s = await mfetch('/api/report/generate/status', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task_id: taskId }),
+      body:    JSON.stringify({ task_id: taskId }),
     }) as { success: boolean; data?: { status: string } };
     return s.data?.status === 'completed' || s.data?.status === 'failed';
-  }, POLL_INTERVAL_MS, 2 * 60 * 1000);
+  }, POLL_INTERVAL_MS, 5 * 60 * 1000);
 
-  // Fetch the full report
-  const report = await mfetch(`/api/report/${reportId}`, {
-    method: 'GET',
-  }) as { success: boolean; data?: { content?: string; sections?: { content: string }[] } };
+  // Fetch the assembled markdown document
+  const report = await mfetch(`/api/report/${reportId}`, { method: 'GET' }) as {
+    success: boolean;
+    data?: { markdown_content?: string; content?: string };
+  };
 
   if (!report.success) return null;
+  if (report.data?.markdown_content) return report.data.markdown_content;
+  if (report.data?.content)          return report.data.content;
 
-  // Try to get full content, fall back to concatenating sections
-  if (report.data?.content) return report.data.content;
-
-  const sections = await mfetch(`/api/report/${reportId}/sections`, {
-    method: 'GET',
-  }) as { success: boolean; data?: { sections: { content: string }[] } };
-
+  // Last resort: concatenate individual section files
+  const sections = await mfetch(`/api/report/${reportId}/sections`, { method: 'GET' }) as {
+    success: boolean;
+    data?: { sections: { content: string }[] };
+  };
   if (sections.success && sections.data?.sections?.length) {
     return sections.data.sections.map((s) => s.content).join('\n\n');
   }
@@ -253,34 +499,51 @@ async function generateReport(simId: string): Promise<string | null> {
 export async function runMiroFishAnalysis(
   market: ParsedMarket,
   contextBlock: string,
-): Promise<string | null> {
-  // Skip if MiroFish isn't running (MIROFISH_URL not reachable)
+): Promise<MiroFishResult> {
+  // Health check — fail silently if MiroFish isn't reachable on VPS
   try {
-    await fetch(`${env.MIROFISH_URL}/api/graph/tasks`, {
-      signal: AbortSignal.timeout(3_000),
-    });
+    await fetch(`${env.MIROFISH_URL}/api/graph/tasks`, { signal: AbortSignal.timeout(3_000) });
   } catch {
-    return null; // MiroFish not available — skip silently
+    return { report: null, swarmStats: null };
   }
 
-  const deadline = Date.now() + PIPELINE_TIMEOUT_MS;
+  const deadline  = Date.now() + PIPELINE_TIMEOUT_MS;
   const remaining = () => deadline - Date.now();
 
   try {
-    const seedDoc = buildSeedDoc(market, contextBlock);
+    // Step 0: Generate named stakeholders — the entity-count lever
+    const stakeholders = await generateStakeholders(market.question);
+    if (remaining() < 0) return { report: null, swarmStats: null };
 
+    // Step 1: Build rich seed with named entities
+    const seedDoc = buildRichSeedDoc(market, contextBlock, stakeholders);
+
+    // Step 2: Ontology — MiroFish extracts 10 entity types from the seed
     const projectId = await generateOntology(seedDoc, market.id);
-    if (!projectId || remaining() < 0) return null;
+    if (!projectId || remaining() < 0) return { report: null, swarmStats: null };
 
+    // Step 3: Graph — Zep ingests text chunks, extracts named entity nodes
     const graphId = await buildGraph(projectId);
-    if (!graphId || remaining() < 0) return null;
+    if (!graphId || remaining() < 0) return { report: null, swarmStats: null };
 
-    const simId = await runSimulation(graphId);
-    if (!simId || remaining() < 0) return null;
+    // Step 4: Create + prepare + start — generates personas for every entity node
+    const sim = await initSimulation(projectId, graphId);
+    if (!sim || remaining() < 0) return { report: null, swarmStats: null };
 
-    const report = await generateReport(simId);
-    return report;
+    // Step 5: Poll simulation, interview all agents at the 60% mark
+    const interviews  = await pollAndInterview(sim.simId, market.question);
+    const swarmStats  = computeSwarmStats(interviews, sim.agentCount);
+
+    if (remaining() < 60_000) {
+      // Too close to deadline — skip report, return stats only
+      return { report: null, swarmStats };
+    }
+
+    // Step 6: Report — ReACT agent synthesizes simulation data into markdown analysis
+    const report = await generateReport(sim.simId).catch(() => null);
+
+    return { report, swarmStats };
   } catch {
-    return null; // Always fail gracefully — ensemble runs with or without MiroFish
+    return { report: null, swarmStats: null };
   }
 }

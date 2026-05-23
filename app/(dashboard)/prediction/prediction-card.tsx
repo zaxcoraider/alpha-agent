@@ -129,6 +129,27 @@ export function PredictionCard({ p }: { p: Prediction }) {
       <div className="space-y-2 py-0.5">
         <ProbBar label="Market"   prob={p.marketProb} color="bg-blue-500/70" />
         <ProbBar label="Ensemble" prob={p.yourProb}   color={hasEdge ? 'bg-emerald-500' : 'bg-muted-foreground/50'} />
+        {p.miroFishMeanProb != null && (
+          <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-16 shrink-0 text-purple-400/80">
+              Swarm{p.miroFishAgentCount ? ` ×${p.miroFishAgentCount}` : ''}
+            </span>
+            <div className="flex-1 rounded-full bg-muted/60 h-1.5 overflow-hidden">
+              <div
+                className="h-1.5 rounded-full bg-purple-500/80 transition-all duration-700"
+                style={{ width: `${Math.round(p.miroFishMeanProb * 100)}%` }}
+              />
+            </div>
+            <span className="w-8 text-right font-mono tabular-nums text-purple-400/80">
+              {Math.round(p.miroFishMeanProb * 100)}%
+            </span>
+            {p.miroFishStdDev != null && (
+              <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+                ±{Math.round(p.miroFishStdDev * 100)}%
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Key evidence */}
