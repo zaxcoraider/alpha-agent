@@ -25,12 +25,21 @@ export type MiroFishResult = {
   swarmStats: SwarmStats | null;
 };
 
+// ─── Depth modes ─────────────────────────────────────────────────────────────
+// Controls agent count (stakeholders → Zep nodes → personas) and simulation rounds.
+
+export type SwarmDepth = 'quick' | 'standard' | 'deep' | 'max';
+
+export const DEPTH_CONFIG = {
+  quick:    { stakeholders: 20,  rounds: 15, parallel: 10, timeoutMs: 12 * 60 * 1000, prepTimeoutMs: 3 * 60 * 1000 },
+  standard: { stakeholders: 100, rounds: 25, parallel: 20, timeoutMs: 30 * 60 * 1000, prepTimeoutMs: 8 * 60 * 1000 },
+  deep:     { stakeholders: 300, rounds: 40, parallel: 30, timeoutMs: 55 * 60 * 1000, prepTimeoutMs: 20 * 60 * 1000 },
+  max:      { stakeholders: 500, rounds: 60, parallel: 40, timeoutMs: 90 * 60 * 1000, prepTimeoutMs: 35 * 60 * 1000 },
+} as const;
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-// 20 min — covers: stakeholders + ontology + graph + prepare(80 agents) + sim(30 rounds) + interview + report
-const PIPELINE_TIMEOUT_MS = 20 * 60 * 1000;
-const POLL_INTERVAL_MS    = 8_000;
-const SIM_MAX_ROUNDS      = 30;
+const POLL_INTERVAL_MS = 8_000;
 
 // ─── HTTP helper ──────────────────────────────────────────────────────────────
 
@@ -75,48 +84,67 @@ async function poll(
 const StakeholderSchema = z.object({
   stakeholders: z.array(
     z.object({
-      name:    z.string(),
-      role:    z.string().max(60),
-      stance:  z.enum(['bullish', 'bearish', 'neutral']),
-      note:    z.string().max(100),
+      name:   z.string(),
+      role:   z.string().max(60),
+      stance: z.enum(['bullish', 'bearish', 'neutral']),
+      note:   z.string().max(100),
     }),
-  ).min(60).max(120),
+  ).min(5).max(600),
 });
 
-async function generateStakeholders(question: string): Promise<string> {
-  try {
-    const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),   // DeepSeek V3.2 — cheap + fast enough
-      schema:      StakeholderSchema,
-      abortSignal: AbortSignal.timeout(35_000),
-      prompt: `Generate 80-120 named, real-world stakeholders who would have strong and VARIED opinions about this prediction market question:
+async function generateStakeholders(question: string, targetCount: number): Promise<string> {
+  // For large counts, generate in two batches to avoid LLM output limits
+  const batchSize = Math.min(targetCount, 120);
+  const batches   = Math.ceil(targetCount / batchSize);
+  const allStakeholders: Array<{ name: string; role: string; stance: string; note: string }> = [];
+
+  for (let b = 0; b < batches; b++) {
+    const thisBatch = b === batches - 1
+      ? targetCount - allStakeholders.length
+      : batchSize;
+
+    try {
+      const { object } = await generateObject({
+        model:       dgrid(MODELS.classifier),
+        schema:      StakeholderSchema,
+        abortSignal: AbortSignal.timeout(60_000),
+        prompt: `Generate exactly ${thisBatch} named, real-world stakeholders (batch ${b + 1}/${batches}) with VARIED opinions on:
 
 "${question}"
 
-Include a realistic mix (not all bullish):
-- Named crypto traders, whales, and degens (e.g. prominent CT accounts, anonymous wallets)
-- Institutional desks: Galaxy Digital, Paradigm, a16z, Grayscale, BlackRock crypto desk
-- Named analysts and researchers: TradFi crossovers, on-chain specialists
+${b > 0 ? `Already generated ${allStakeholders.length} stakeholders — generate ${thisBatch} NEW and DIFFERENT ones now.` : ''}
+
+Include a diverse mix:
+- Crypto traders, whales, degens (prominent CT accounts, anonymous wallets)
+- Institutional: Galaxy Digital, Paradigm, a16z, Grayscale, BlackRock, Fidelity, Jump Trading
+- Analysts and researchers: TradFi crossovers, on-chain specialists, quant funds
 - Protocol founders and teams relevant to the topic
-- Exchanges and market makers: Binance, Coinbase, Kraken, Jump Trading, Wintermute
-- Media personalities: Bloomberg Crypto reporters, Decrypt, CoinDesk, Bankless
-- Skeptics and bears: Peter Schiff-style critics, regulatory hawks, academics who doubt crypto
-- On-chain analytics: Glassnode, Nansen, CryptoQuant, Santiment analysts
-- Retail community members: Reddit r/CryptoCurrency, Twitter degen communities
-- Government / regulatory bodies if relevant
+- Exchanges and market makers: Binance, Coinbase, Kraken, Wintermute, Jane Street crypto
+- Media personalities: Bloomberg Crypto, Decrypt, CoinDesk, Bankless, Unchained
+- Skeptics and bears: Peter Schiff-style critics, regulatory hawks, skeptical academics
+- On-chain analytics: Glassnode, Nansen, CryptoQuant, Santiment, Arkham analysts
+- Retail: Reddit r/CryptoCurrency, degen Twitter communities, NFT traders
+- Government and regulatory: SEC officials, Fed researchers, ECB policy staff
+- DeFi protocols and DAOs relevant to the question
+- Traditional finance crossing over: JPMorgan crypto desk, Goldman Sachs digital assets
 
-Use real names for named individuals. Spread stances realistically — bears and skeptics make the simulation richer.`,
-    });
+Use real names where possible. Spread stances — 40% bullish, 35% bearish, 25% neutral gives the richest signal.`,
+      });
 
-    const lines = object.stakeholders
-      .map((s) => `- ${s.name} | ${s.role} | ${s.stance} | ${s.note}`)
-      .join('\n');
-
-    return `## Ecosystem Participants (${object.stakeholders.length} named entities)\n\n${lines}`;
-  } catch {
-    // Non-fatal — simulation will proceed with a thinner seed (fewer agents)
-    return '';
+      allStakeholders.push(...object.stakeholders);
+    } catch {
+      // Non-fatal — continue with what we have
+      break;
+    }
   }
+
+  if (allStakeholders.length === 0) return '';
+
+  const lines = allStakeholders
+    .map((s) => `- ${s.name} | ${s.role} | ${s.stance} | ${s.note}`)
+    .join('\n');
+
+  return `## Ecosystem Participants (${allStakeholders.length} named entities)\n\n${lines}`;
 }
 
 // ─── Step 1: Rich seed document ───────────────────────────────────────────────
@@ -231,6 +259,9 @@ async function buildGraph(projectId: string): Promise<string | null> {
 async function initSimulation(
   projectId: string,
   graphId: string,
+  rounds: number,
+  parallel: number,
+  prepTimeoutMs: number,
 ): Promise<{ simId: string; agentCount: number } | null> {
   // Create — project_id is required; the old code was missing it
   const createRes = await mfetch('/api/simulation/create', {
@@ -254,7 +285,7 @@ async function initSimulation(
     body:    JSON.stringify({
       simulation_id:          simId,
       use_llm_for_profiles:   true,
-      parallel_profile_count: 20,   // 20 concurrent persona generations per batch
+      parallel_profile_count: parallel,
     }),
   }) as {
     success: boolean;
@@ -273,7 +304,7 @@ async function initSimulation(
       body:    JSON.stringify({ task_id: prepTaskId }),
     }) as { success: boolean; data?: { status: string } };
     return s.data?.status === 'completed' || s.data?.status === 'failed';
-  }, POLL_INTERVAL_MS, 6 * 60 * 1000);  // 6 min for 80-120 agents
+  }, POLL_INTERVAL_MS, prepTimeoutMs);
 
   if (!prepDone) return null;
 
@@ -284,7 +315,7 @@ async function initSimulation(
     body:    JSON.stringify({
       simulation_id: simId,
       platform:      'parallel',
-      max_rounds:    SIM_MAX_ROUNDS,
+      max_rounds:    rounds,
     }),
   }) as { success: boolean };
 
@@ -350,11 +381,11 @@ Example: "PROBABILITY: 67% - The institutional ETF inflows and macro tailwinds m
 
 // Poll the simulation run-status and fire interview once we reach the 60% mark.
 // Continues polling after interview until simulation fully completes.
-async function pollAndInterview(simId: string, question: string): Promise<InterviewEntry[]> {
-  const interviewAtRound = Math.floor(SIM_MAX_ROUNDS * 0.6); // round 18 of 30
+async function pollAndInterview(simId: string, question: string, maxRounds: number): Promise<InterviewEntry[]> {
+  const interviewAtRound = Math.floor(maxRounds * 0.6);
   let interviewed = false;
   let interviews:  InterviewEntry[] = [];
-  const deadline   = Date.now() + 10 * 60 * 1000;  // 10 min window for sim + interview
+  const deadline   = Date.now() + 15 * 60 * 1000;  // 15 min window for sim + interview
 
   while (Date.now() < deadline) {
     const status = await mfetch(`/api/simulation/${simId}/run-status`, {
@@ -379,7 +410,8 @@ async function pollAndInterview(simId: string, question: string): Promise<Interv
     if (
       simStatus === 'completed' ||
       simStatus === 'stopped'   ||
-      currentRound >= totalRounds
+      currentRound >= totalRounds ||
+      currentRound >= maxRounds
     ) break;
 
     await sleep(POLL_INTERVAL_MS);
@@ -499,7 +531,10 @@ async function generateReport(simId: string): Promise<string | null> {
 export async function runMiroFishAnalysis(
   market: ParsedMarket,
   contextBlock: string,
+  depth: SwarmDepth = 'standard',
 ): Promise<MiroFishResult> {
+  const cfg = DEPTH_CONFIG[depth];
+
   // Health check — fail silently if MiroFish isn't reachable on VPS
   try {
     await fetch(`${env.MIROFISH_URL}/api/graph/tasks`, { signal: AbortSignal.timeout(3_000) });
@@ -507,12 +542,12 @@ export async function runMiroFishAnalysis(
     return { report: null, swarmStats: null };
   }
 
-  const deadline  = Date.now() + PIPELINE_TIMEOUT_MS;
+  const deadline  = Date.now() + cfg.timeoutMs;
   const remaining = () => deadline - Date.now();
 
   try {
-    // Step 0: Generate named stakeholders — the entity-count lever
-    const stakeholders = await generateStakeholders(market.question);
+    // Step 0: Generate named stakeholders — count = cfg.stakeholders
+    const stakeholders = await generateStakeholders(market.question, cfg.stakeholders);
     if (remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 1: Build rich seed with named entities
@@ -527,11 +562,11 @@ export async function runMiroFishAnalysis(
     if (!graphId || remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 4: Create + prepare + start — generates personas for every entity node
-    const sim = await initSimulation(projectId, graphId);
+    const sim = await initSimulation(projectId, graphId, cfg.rounds, cfg.parallel, cfg.prepTimeoutMs);
     if (!sim || remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 5: Poll simulation, interview all agents at the 60% mark
-    const interviews  = await pollAndInterview(sim.simId, market.question);
+    const interviews  = await pollAndInterview(sim.simId, market.question, cfg.rounds);
     const swarmStats  = computeSwarmStats(interviews, sim.agentCount);
 
     if (remaining() < 60_000) {

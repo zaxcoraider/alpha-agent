@@ -16,6 +16,7 @@ const envSchema = z.object({
   TELEGRAM_CHAT_ID: z.string().optional(),
   NEXT_PUBLIC_APP_URL: z.string().url().default('http://localhost:3000'),
   ACCESS_TOKEN: z.string().optional(),
+  PREDICT_SERVER_URL: z.string().url().optional(), // http://VPS_IP:5002
 });
 
 export const env = envSchema.parse(process.env);

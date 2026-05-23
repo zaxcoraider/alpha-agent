@@ -5,17 +5,27 @@ import { PredictionCard } from './prediction-card';
 import { Search, Sparkles, X } from 'lucide-react';
 import type { Prediction } from '@/lib/agents/prediction';
 
+type SwarmDepth = 'quick' | 'standard' | 'deep' | 'max';
+
+const DEPTH_OPTIONS: { value: SwarmDepth; label: string; agents: number; time: string }[] = [
+  { value: 'quick',    label: 'Quick',    agents: 20,  time: '~10 min' },
+  { value: 'standard', label: 'Standard', agents: 100, time: '~30 min' },
+  { value: 'deep',     label: 'Deep',     agents: 300, time: '~55 min' },
+  { value: 'max',      label: 'Max',      agents: 500, time: '~90 min' },
+];
+
 type State =
   | { phase: 'idle' }
   | { phase: 'submitting' }
-  | { phase: 'polling'; jobId: string; question: string; isRealMarket: boolean }
+  | { phase: 'polling'; jobId: string; question: string; isRealMarket: boolean; depth: SwarmDepth }
   | { phase: 'done'; prediction: Prediction }
   | { phase: 'error'; message: string };
 
 export function PredictForm() {
-  const [input, setValue] = useState('');
-  const [state, setState] = useState<State>({ phase: 'idle' });
-  const intervalRef       = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [input, setValue]   = useState('');
+  const [depth, setDepth]   = useState<SwarmDepth>('standard');
+  const [state, setState]   = useState<State>({ phase: 'idle' });
+  const intervalRef         = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (state.phase !== 'polling') {
@@ -44,11 +54,11 @@ export function PredictForm() {
       const res  = await fetch('/api/predict-custom', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: trimmed }),
+        body: JSON.stringify({ input: trimmed, depth }),
       });
       if (!res.ok) throw new Error('Request failed');
       const data = await res.json() as { jobId: string; question: string; isRealMarket: boolean };
-      setState({ phase: 'polling', ...data });
+      setState({ phase: 'polling', ...data, depth });
     } catch {
       setState({ phase: 'error', message: 'Failed to start. Is Inngest running?' });
     }
@@ -72,6 +82,29 @@ export function PredictForm() {
       </div>
 
       <div className="p-4 space-y-3">
+        {/* Depth selector */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground/60 shrink-0">Swarm depth:</span>
+          {DEPTH_OPTIONS.map((d) => (
+            <button
+              key={d.value}
+              type="button"
+              onClick={() => setDepth(d.value)}
+              disabled={isLoading}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+                depth === d.value
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                  : 'bg-muted/40 text-muted-foreground hover:text-foreground border border-transparent'
+              }`}
+            >
+              {d.label} <span className="opacity-60">×{d.agents}</span>
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground/40 ml-1">
+            {DEPTH_OPTIONS.find((d) => d.value === depth)?.time}
+          </span>
+        </div>
+
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/40 pointer-events-none" />
@@ -100,7 +133,7 @@ export function PredictForm() {
               <span className="text-foreground font-medium">Analyzing: </span>
               <span className="truncate">{state.question}</span>
               {state.isRealMarket && <span className="text-blue-400 ml-1">[real market]</span>}
-              <span className="text-muted-foreground/50 ml-1">· 10 analysts running…</span>
+              <span className="text-muted-foreground/50 ml-1">· 10 analysts + MiroFish {state.phase === 'polling' ? `×${DEPTH_OPTIONS.find(d=>d.value===state.depth)?.agents}` : ''} running…</span>
             </div>
           </div>
         )}

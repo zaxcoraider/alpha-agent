@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { inngest } from '@/inngest/client';
 import { fetchMarketBySlug } from '@/lib/sources/polymarket';
+import { env } from '@/lib/env';
 import { randomUUID } from 'crypto';
+import type { SwarmDepth } from '@/lib/sources/mirofish';
 
 function extractPolymarketSlug(input: string): string | null {
   try {
@@ -15,24 +16,35 @@ function extractPolymarketSlug(input: string): string | null {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { input } = await req.json() as { input: string };
+  const { input, depth = 'standard' } = await req.json() as { input: string; depth?: SwarmDepth };
   if (!input?.trim()) {
     return NextResponse.json({ error: 'input is required' }, { status: 400 });
   }
 
-  const jobId = randomUUID();
-  const slug  = extractPolymarketSlug(input.trim());
-
-  // If it's a Polymarket URL, pre-fetch the real market data
+  const jobId  = randomUUID();
+  const slug   = extractPolymarketSlug(input.trim());
   const market = slug ? await fetchMarketBySlug(slug) : null;
-
-  // question is the market question (if fetched) or the raw input
   const question = market?.question ?? input.trim();
 
-  await inngest.send({
-    name: 'agent/custom-predict',
-    data: { question, jobId, market: market ?? null, chatId: null },
-  });
+  // Delegate to VPS predict server (no timeout limits)
+  const serverUrl = env.PREDICT_SERVER_URL;
+  if (!serverUrl) {
+    return NextResponse.json({ error: 'Predict server not configured (PREDICT_SERVER_URL missing)' }, { status: 503 });
+  }
+
+  const vpsRes = await fetch(`${serverUrl}/predict`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${env.ACCESS_TOKEN ?? ''}`,
+    },
+    body: JSON.stringify({ question, jobId, market: market ?? null, depth }),
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => null);
+
+  if (!vpsRes?.ok) {
+    return NextResponse.json({ error: 'VPS predict server unreachable' }, { status: 503 });
+  }
 
   return NextResponse.json({ jobId, question, isRealMarket: market !== null });
 }
