@@ -47,10 +47,7 @@ export const predictionScan = inngest.createFunction(
         .where(eq(scanRuns.id, run.id));
     });
 
-    await step.run('telegram-alert', async () => {
-      await sendScanAlert(predictions, scanned);
-    });
-
+    // Telegram alert is sent by the VPS scan runner — skip here to avoid duplicates
     return { scanned, withEdge, saved: predictions.length };
   }
 );
