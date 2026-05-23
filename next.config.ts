@@ -2,7 +2,13 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   experimental: {
-    serverActions: { allowedOrigins: ['localhost:3000'] },
+    // Allow server actions from any vercel.app subdomain + localhost
+    serverActions: {
+      allowedOrigins: [
+        'localhost:3000',
+        '*.vercel.app',
+      ],
+    },
   },
 };
 
