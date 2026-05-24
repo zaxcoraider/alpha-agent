@@ -254,7 +254,7 @@ async function buildGraph(projectId: string): Promise<string | null> {
       return true;
     }
     return false;
-  }, POLL_INTERVAL_MS, 5 * 60 * 1000);
+  }, POLL_INTERVAL_MS, 12 * 60 * 1000);
 
   return done ? graphId : null;
 }
