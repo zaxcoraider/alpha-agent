@@ -44,7 +44,7 @@ const AnalystSchema = z.object({
   yourProb: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
   headline: z.string().max(200),
-  evidence: z.array(z.string()).max(3),
+  evidence: z.array(z.string()),
 });
 
 type AnalystOpinion = z.infer<typeof AnalystSchema> & { role: string };
