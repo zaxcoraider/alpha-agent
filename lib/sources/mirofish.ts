@@ -32,7 +32,7 @@ export type SwarmDepth = 'quick' | 'standard' | 'deep' | 'max';
 
 export const DEPTH_CONFIG = {
   quick:    { stakeholders: 20,  rounds: 15, parallel: 10, timeoutMs: 12 * 60 * 1000, prepTimeoutMs: 3 * 60 * 1000 },
-  standard: { stakeholders: 100, rounds: 25, parallel: 20, timeoutMs: 30 * 60 * 1000, prepTimeoutMs: 8 * 60 * 1000 },
+  standard: { stakeholders: 50,  rounds: 25, parallel: 20, timeoutMs: 30 * 60 * 1000, prepTimeoutMs: 8 * 60 * 1000 },
   deep:     { stakeholders: 300, rounds: 40, parallel: 30, timeoutMs: 55 * 60 * 1000, prepTimeoutMs: 20 * 60 * 1000 },
   max:      { stakeholders: 500, rounds: 60, parallel: 40, timeoutMs: 90 * 60 * 1000, prepTimeoutMs: 35 * 60 * 1000 },
 } as const;
