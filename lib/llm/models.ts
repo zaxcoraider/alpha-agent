@@ -43,7 +43,7 @@ export type ModelId  = (typeof MODELS)[ModelKey];
 export const AGENT_MODELS: Record<string, string> = {
   // Prediction Tab
   prediction_analyst:    MODELS.classifier,  // 10 parallel generateObject — v3.2 direct routing (terminus → Bedrock rejects temperature)
-  prediction_aggregator: MODELS.reasoner,    // Chief Analyst — Opus 4.7, best synthesizer
+  prediction_aggregator: MODELS.classifier,  // Chief Analyst — v3.2 direct routing (Opus 4.7 → Bedrock rejects temperature)
   prediction_social:     MODELS.grok,        // live X/Twitter signal
 
   // Scanners (classification — fast + cheap)
