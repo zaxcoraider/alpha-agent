@@ -233,6 +233,7 @@ async function buildGraph(projectId: string): Promise<string | null> {
     body:    JSON.stringify({ project_id: projectId }),
   }) as { success: boolean; data?: { task_id: string } };
 
+  console.log(`[mirofish] buildGraph response:`, JSON.stringify(buildRes));
   if (!buildRes.success || !buildRes.data?.task_id) return null;
   const taskId = buildRes.data.task_id;
 
@@ -240,14 +241,20 @@ async function buildGraph(projectId: string): Promise<string | null> {
   const done = await poll(async () => {
     const s = await mfetch(`/api/graph/task/${taskId}`, { method: 'GET' }) as {
       success: boolean;
-      data?: { status: string; graph_id?: string };
+      data?: { status: string; graph_id?: string; result?: { graph_id?: string } };
     };
-    if (s.data?.status === 'completed' && s.data.graph_id) {
-      graphId = s.data.graph_id;
+    console.log(`[mirofish] graph task status:`, JSON.stringify(s));
+    const gid = s.data?.graph_id ?? s.data?.result?.graph_id ?? null;
+    if (s.data?.status === 'completed' && gid) {
+      graphId = gid;
       return true;
     }
-    return s.data?.status === 'failed';
-  }, POLL_INTERVAL_MS, 3 * 60 * 1000);
+    if (s.data?.status === 'failed') {
+      console.error(`[mirofish] graph build task failed`);
+      return true;
+    }
+    return false;
+  }, POLL_INTERVAL_MS, 5 * 60 * 1000);
 
   return done ? graphId : null;
 }

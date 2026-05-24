@@ -55,7 +55,7 @@ const AggregatorSchema = z.object({
   consensusProb: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
   keyEvidence: z.array(z.string()).max(5),
-  reasoning: z.string().max(800),
+  reasoning: z.string(),
 });
 
 // ─── 10-analyst ensemble ──────────────────────────────────────────────────────
