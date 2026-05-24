@@ -214,7 +214,7 @@ async function generateOntology(seedText: string, marketId: string): Promise<str
     'Generate diverse crypto prediction market participant personas who vigorously debate market resolution probabilities. Entity types must cover: institutional traders, retail investors, domain experts, contrarians, quantitative analysts, media personalities, on-chain analysts, skeptics/bears, protocol teams, and market makers.',
   );
 
-  const res = await mfetch('/api/graph/ontology/generate', { method: 'POST', body: formData }) as {
+  const res = await mfetch('/api/graph/ontology/generate', { method: 'POST', body: formData }, 120_000) as {
     success: boolean;
     data?: { project_id: string };
   };
