@@ -85,9 +85,9 @@ const StakeholderSchema = z.object({
   stakeholders: z.array(
     z.object({
       name:   z.string(),
-      role:   z.string().max(60),
+      role:   z.string().max(120),
       stance: z.enum(['bullish', 'bearish', 'neutral']),
-      note:   z.string().max(100),
+      note:   z.string().max(200),
     }),
   ).min(5).max(600),
 });
