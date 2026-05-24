@@ -93,8 +93,8 @@ const StakeholderSchema = z.object({
 });
 
 async function generateStakeholders(question: string, targetCount: number): Promise<string> {
-  // For large counts, generate in two batches to avoid LLM output limits
-  const batchSize = Math.min(targetCount, 120);
+  // Small batches to stay within 60s LLM timeout per call
+  const batchSize = Math.min(targetCount, 30);
   const batches   = Math.ceil(targetCount / batchSize);
   const allStakeholders: Array<{ name: string; role: string; stance: string; note: string }> = [];
 
@@ -133,8 +133,8 @@ Use real names where possible. Spread stances — 40% bullish, 35% bearish, 25% 
       });
 
       allStakeholders.push(...object.stakeholders);
-    } catch {
-      // Non-fatal — continue with what we have
+    } catch (err) {
+      console.error(`[mirofish] stakeholder batch ${b} failed:`, (err as Error).message);
       break;
     }
   }

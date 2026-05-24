@@ -43,7 +43,7 @@ export type Prediction = z.infer<typeof PredictionSchema>;
 const AnalystSchema = z.object({
   yourProb: z.number().min(0).max(1),
   confidence: z.number().min(0).max(1),
-  headline: z.string().max(200),
+  headline: z.string(),
   evidence: z.array(z.string()),
 });
 
