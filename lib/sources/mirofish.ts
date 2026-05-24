@@ -549,6 +549,7 @@ export async function runMiroFishAnalysis(
   try {
     // Step 0: Generate named stakeholders — count = cfg.stakeholders
     const stakeholders = await generateStakeholders(market.question, cfg.stakeholders);
+    console.log(`[mirofish] stakeholders generated: ${stakeholders.length} chars`);
     if (remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 1: Build rich seed with named entities
@@ -556,22 +557,25 @@ export async function runMiroFishAnalysis(
 
     // Step 2: Ontology — MiroFish extracts 10 entity types from the seed
     const projectId = await generateOntology(seedDoc, market.id);
+    console.log(`[mirofish] ontology projectId: ${projectId}`);
     if (!projectId || remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 3: Graph — Zep ingests text chunks, extracts named entity nodes
     const graphId = await buildGraph(projectId);
+    console.log(`[mirofish] graphId: ${graphId}`);
     if (!graphId || remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 4: Create + prepare + start — generates personas for every entity node
     const sim = await initSimulation(projectId, graphId, cfg.rounds, cfg.parallel, cfg.prepTimeoutMs);
+    console.log(`[mirofish] sim: ${JSON.stringify(sim)}`);
     if (!sim || remaining() < 0) return { report: null, swarmStats: null };
 
     // Step 5: Poll simulation, interview all agents at the 60% mark
     const interviews  = await pollAndInterview(sim.simId, market.question, cfg.rounds);
     const swarmStats  = computeSwarmStats(interviews, sim.agentCount);
+    console.log(`[mirofish] interviews: ${interviews.length}, swarmStats: ${JSON.stringify(swarmStats)}`);
 
     if (remaining() < 60_000) {
-      // Too close to deadline — skip report, return stats only
       return { report: null, swarmStats };
     }
 
@@ -579,7 +583,8 @@ export async function runMiroFishAnalysis(
     const report = await generateReport(sim.simId).catch(() => null);
 
     return { report, swarmStats };
-  } catch {
+  } catch (err) {
+    console.error(`[mirofish] pipeline error:`, err);
     return { report: null, swarmStats: null };
   }
 }
