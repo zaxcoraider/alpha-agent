@@ -120,7 +120,7 @@ async function runAnalyst(
       model: dgrid(AGENT_MODELS.prediction_analyst),
       schema: AnalystSchema,
       mode: 'json',
-      abortSignal: AbortSignal.timeout(25_000),
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
 
 MARKET:
