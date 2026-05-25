@@ -38,9 +38,10 @@ export type RawMemeToken = z.infer<typeof GrokMemeSchema>['tokens'][0] & {
 export async function scanCTForMemes(): Promise<RawMemeToken[]> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.grok),
+      model:       dgrid(MODELS.classifier),  // deepseek-v3.2 — confirmed working
       schema:      GrokMemeSchema,
-      abortSignal: AbortSignal.timeout(35_000),
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `You have real-time access to X (Twitter). Scan Crypto Twitter RIGHT NOW for emerging meme coins with early alpha signals.
 
 Focus on these 4 chains: Solana (sol), Ethereum (eth), Base (base), BNB Chain (bnb)

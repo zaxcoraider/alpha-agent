@@ -5,6 +5,7 @@ import type { XEvent } from '@/lib/agents/x-events';
 import {
   Mic, Flame, Eye, Gift, Unlock, TrendingUp,
   ExternalLink, Users, ChevronDown, ChevronUp, Zap, ArrowUpRight, ArrowDownRight,
+  Globe, Activity,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,12 +22,14 @@ type SortKey = 'urgency' | 'relevance' | 'engagement';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<XEvent['type'], { label: string; color: string; bg: string; Icon: React.ElementType }> = {
-  space:        { label: 'Space',        color: 'text-purple-300',  bg: 'bg-purple-500/15 border-purple-500/30',  Icon: Mic        },
-  viral_thread: { label: 'Viral Thread', color: 'text-orange-300',  bg: 'bg-orange-500/15 border-orange-500/30',  Icon: Flame      },
-  kol_alert:    { label: 'KOL Alert',    color: 'text-sky-300',     bg: 'bg-sky-500/15 border-sky-500/30',        Icon: Eye        },
-  airdrop:      { label: 'Airdrop',      color: 'text-emerald-300', bg: 'bg-emerald-500/15 border-emerald-500/30',Icon: Gift       },
-  token_unlock: { label: 'Unlock',       color: 'text-yellow-300',  bg: 'bg-yellow-500/15 border-yellow-500/30',  Icon: Unlock     },
-  listing:      { label: 'Listing',      color: 'text-cyan-300',    bg: 'bg-cyan-500/15 border-cyan-500/30',      Icon: TrendingUp },
+  space:            { label: 'Space',           color: 'text-purple-300',  bg: 'bg-purple-500/15 border-purple-500/30',  Icon: Mic        },
+  viral_thread:     { label: 'Viral Thread',    color: 'text-orange-300',  bg: 'bg-orange-500/15 border-orange-500/30',  Icon: Flame      },
+  kol_alert:        { label: 'KOL Alert',       color: 'text-sky-300',     bg: 'bg-sky-500/15 border-sky-500/30',        Icon: Eye        },
+  airdrop:          { label: 'Airdrop',         color: 'text-emerald-300', bg: 'bg-emerald-500/15 border-emerald-500/30',Icon: Gift       },
+  token_unlock:     { label: 'Unlock',          color: 'text-yellow-300',  bg: 'bg-yellow-500/15 border-yellow-500/30',  Icon: Unlock     },
+  listing:          { label: 'Listing',         color: 'text-cyan-300',    bg: 'bg-cyan-500/15 border-cyan-500/30',      Icon: TrendingUp },
+  narrative_shift:  { label: 'Narrative',       color: 'text-violet-300',  bg: 'bg-violet-500/15 border-violet-500/30',  Icon: Globe      },
+  whale_move:       { label: 'Whale Move',      color: 'text-blue-300',    bg: 'bg-blue-500/15 border-blue-500/30',      Icon: Activity   },
 };
 
 const URGENCY_CONFIG: Record<XEvent['urgency'], { label: string; color: string; dot: string }> = {

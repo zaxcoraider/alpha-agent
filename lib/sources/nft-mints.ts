@@ -37,9 +37,10 @@ export type RawNFTProject = z.infer<typeof GrokNFTSchema>['projects'][0] & {
 export async function scanCTForMints(): Promise<RawNFTProject[]> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.grok),
+      model:       dgrid(MODELS.classifier),  // deepseek-v3.2 — confirmed working
       schema:      GrokNFTSchema,
-      abortSignal: AbortSignal.timeout(35_000),
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `You have real-time access to X (Twitter). Search CT (Crypto Twitter) RIGHT NOW for NFT mints that are either live, about to launch, or just announced — especially early signals with few mentions.
 
 Search signals:

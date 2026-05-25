@@ -38,6 +38,11 @@ export const NFTMintSchema = z.object({
   floorPrediction7d: z.string().optional(),
   similarTo:         z.string().optional(),
 
+  isFree:          z.boolean(),              // mintPrice === 0 — free mint alert
+  mintStrategy:    z.string().max(300),      // concrete advice: how many to mint, when to sell
+  bluechipScore:   z.number().int().min(0).max(100), // probability of becoming blue chip
+  nextSteps:       z.string().max(200),      // what to do right now
+
   whaleActivity: z.boolean(),
   whaleWallets:  z.array(z.string()),
   gasEstimate:   z.string().optional(),
@@ -51,9 +56,10 @@ export type NFTMint = z.infer<typeof NFTMintSchema>;
 async function analyzeProject(raw: RawNFTProject): Promise<NFTMint | null> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.reasoner),       // Claude Opus 4.7
+      model:       dgrid(MODELS.balanced),       // Sonnet 4.6 — fast + no temp issue
       schema:      NFTMintSchema,
-      abortSignal: AbortSignal.timeout(25_000),
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `Analyze this NFT project for alpha score, rug risk, and future potential.
 
 Project data:
@@ -103,6 +109,26 @@ Best estimate of floor price 7 days post-mint based on comparable launches. Form
 
 ── SIMILAR TO ──
 Name the most similar successful launch this resembles in its early signal pattern (e.g. "early Azuki signals" or "early DeGods pattern"). Only if genuinely similar — null if not.
+
+── IS FREE ──
+isFree: true if mintPrice === 0, false otherwise. Free mints are highest priority.
+
+── MINT STRATEGY ──
+Concrete advice tailored to this specific project:
+- If free: "Mint max wallet limit immediately. List 50% at 2x floor, hold rest."
+- If paid: "Only mint if KOL-backed + team doxxed. Budget max 0.05 ETH. Flip at 3x."
+- Include timing advice (mint window, expected floor timeline)
+
+── BLUE CHIP SCORE (0-100) ──
+Probability of becoming a recognized blue chip collection (like BAYC, Azuki, Pudgy Penguins).
+Consider: team track record, art quality signals, community strength, chain momentum, comparable launches.
+Most projects score 0-10. Only score >50 if there are exceptional signals.
+
+── NEXT STEPS ──
+One concrete sentence of what to do RIGHT NOW:
+"Free mint live — go to [link] and mint max 5 now"
+"Add to watchlist — mint opens in 3h, set reminder"
+"Avoid — anonymous team + unverified contract + high price"
 
 Be precise and honest. If signals are weak, score low.`,
     });

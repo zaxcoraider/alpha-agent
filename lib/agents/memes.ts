@@ -39,9 +39,15 @@ export const MemeTokenSchema = z.object({
   rugFlags: z.array(z.string()),
 
   category:       z.enum(['new_gem', 'trending', 'fading', 'pumped']),
-  priceTarget:    z.string().optional(), // "3-5x potential in 48h"
+  priceTarget:    z.string().optional(),
   watchAction:    z.enum(['buy_small', 'watch', 'avoid']),
   watchReason:    z.string().max(200),
+
+  entryMarketCap: z.string().optional(),   // "Best entry under $500K MC"
+  entryStrategy:  z.string().max(250),     // "Buy 0.5 SOL if mcap < $300K, sell 50% at 3x"
+  x2Target:       z.string().optional(),   // market cap at 2x
+  x5Target:       z.string().optional(),   // market cap at 5x
+  developerFlags: z.array(z.string()),     // on-chain red flags from dev wallet
 
   dexUrl:  z.string().optional(),
   source:  z.string(),
@@ -58,9 +64,10 @@ async function analyzeToken(raw: RawMemeToken): Promise<MemeToken | null> {
       : 'unknown';
 
     const { object } = await generateObject({
-      model:       dgrid(MODELS.reasoner),
+      model:       dgrid(MODELS.balanced),  // Sonnet 4.6 — fast + no temp issue
       schema:      MemeTokenSchema,
-      abortSignal: AbortSignal.timeout(25_000),
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `Analyze this meme coin for gem potential and rug risk.
 
 Token data:
@@ -130,6 +137,27 @@ pumped: already >10x, likely too late for safe entry
 buy_small: Strong early signals, acceptable risk — small position worth considering
 watch: Interesting but needs more confirmation — monitor closely
 avoid: Rug flags too high or too late to enter safely
+
+── ENTRY MARKET CAP ──
+Ideal market cap range to enter for best risk/reward. E.g. "Best entry under $500K MC" or "Already too pumped above $5M MC"
+
+── ENTRY STRATEGY ──
+Concrete position-sizing advice: "Buy 0.5 SOL worth if mcap < $300K. Take 50% profit at 3x, hold rest for 10x or zero."
+Be specific about size (% of portfolio or native token amount), entry condition, and exit plan.
+
+── PRICE TARGETS ──
+x2Target: market cap at which this would be a 2x from current price (e.g. "$600K MC")
+x5Target: market cap for 5x (e.g. "$1.5M MC")
+If already pumped or likely to rug, set both to null.
+
+── DEVELOPER FLAGS ──
+developerFlags: list specific on-chain red flags:
+- "Dev wallet holds X% of supply"
+- "Liquidity not locked"
+- "Contract has mint function"
+- "Bundled launch detected (multiple wallets bought at block 0)"
+- "Token tax >5%"
+Empty array if no flags found.
 
 Be honest. Most meme coins fail — score low if signals are weak.`,
     });

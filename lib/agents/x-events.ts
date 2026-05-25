@@ -7,7 +7,7 @@ import { scanXEvents, type RawXEvent } from '@/lib/sources/x-events';
 // ── Output schema ─────────────────────────────────────────────────────────────
 
 export const XEventSchema = z.object({
-  type:           z.enum(['space', 'viral_thread', 'kol_alert', 'airdrop', 'token_unlock', 'listing']),
+  type:           z.enum(['space', 'viral_thread', 'kol_alert', 'airdrop', 'token_unlock', 'listing', 'narrative_shift', 'whale_move']),
   title:          z.string(),
   description:    z.string().max(300),
   kolHandle:      z.string().optional(),
@@ -18,6 +18,8 @@ export const XEventSchema = z.object({
   url:            z.string().optional(),
   urgency:        z.enum(['live', 'today', 'this_week', 'upcoming']),
   engagementCount: z.number().int().min(0).optional(),
+  narrativeTags:   z.array(z.string()).max(4).optional(),
+  ctSentiment:     z.enum(['very_bullish', 'bullish', 'neutral', 'bearish', 'very_bearish']).optional(),
 
   relevanceScore:  z.number().int().min(1).max(10),
   relevanceReason: z.string().max(200),
@@ -39,7 +41,7 @@ async function scoreEvent(raw: RawXEvent): Promise<XEvent | null> {
     const { object } = await generateObject({
       model:       dgrid(MODELS.balanced),
       schema:      XEventSchema,
-      abortSignal: AbortSignal.timeout(20_000),
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `Score and enrich this crypto X event for a serious crypto trader.
 
 Event type: ${raw.type}
