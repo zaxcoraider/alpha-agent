@@ -190,7 +190,7 @@ ${miroFish?.report ? `\nSwarm report excerpt:\n${miroFish.report.slice(0, 800)}`
     model:       dgrid(AGENT_MODELS.prediction_aggregator),
     schema:      AggregatorSchema,
     mode:        'json',
-    abortSignal: AbortSignal.timeout(35_000),
+    abortSignal: AbortSignal.timeout(180_000), // r1-0528 reasoning model needs up to 3 min
     prompt: `You are the Chief Analyst synthesizing two independent signals for a prediction market:
 1. A ${opinions.length}-member specialist analyst ensemble
 ${hasSwarm ? `2. A MiroFish swarm of ${sw!.agentCount} AI agents who debated this question in a social simulation` : ''}
