@@ -105,7 +105,7 @@ async function generateStakeholders(question: string, targetCount: number): Prom
 
     try {
       const { object } = await generateObject({
-        model:       dgrid(MODELS.grok),        // grok-4.20 knows real crypto Twitter people
+        model:       dgrid(MODELS.classifier),    // deepseek-v3.2 — confirmed working for structured output
         schema:      StakeholderSchema,
         mode:        'json',
         abortSignal: AbortSignal.timeout(60_000),
