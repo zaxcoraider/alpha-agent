@@ -7,6 +7,10 @@ import { fetchKalshiMarkets } from '@/lib/sources/kalshi';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
 import { runMiroFishAnalysis, type MiroFishResult } from '@/lib/sources/mirofish';
 
+// ─── Predict mode ────────────────────────────────────────────────────────────
+
+export type PredictMode = 'both' | 'analysts_only' | 'mirofish_only';
+
 // ─── Final output schema (stored in DB) ──────────────────────────────────────
 
 export const PredictionSchema = z.object({
@@ -227,6 +231,7 @@ export async function analyseMarket(
   market: ParsedMarket,
   miroFish: MiroFishResult | null = null,
   prebuiltContext?: string,  // pass when runPredictionScan already fetched context for MiroFish
+  mode: PredictMode = 'both',
 ): Promise<Prediction> {
   // Step 1: fetch live context, or reuse pre-built to avoid double-fetch
   let contextBlock = prebuiltContext ?? '';
@@ -237,24 +242,33 @@ export async function analyseMarket(
       : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
   }
 
-  // Step 2: run all 10 analysts in parallel with the context
-  const analystResults = await Promise.allSettled(
-    ANALYST_ROLES.map((a) => runAnalyst(market, a.role, a.lens, contextBlock)),
-  );
+  // Step 2: run analysts (skip when mirofish_only)
+  let opinions: AnalystOpinion[] = [];
+  if (mode !== 'mirofish_only') {
+    const analystResults = await Promise.allSettled(
+      ANALYST_ROLES.map((a) => runAnalyst(market, a.role, a.lens, contextBlock)),
+    );
+    opinions = analystResults
+      .filter(
+        (r): r is PromiseFulfilledResult<AnalystOpinion> =>
+          r.status === 'fulfilled' && r.value !== null,
+      )
+      .map((r) => r.value);
 
-  const opinions: AnalystOpinion[] = analystResults
-    .filter(
-      (r): r is PromiseFulfilledResult<AnalystOpinion> =>
-        r.status === 'fulfilled' && r.value !== null,
-    )
-    .map((r) => r.value);
-
-  if (opinions.length === 0) {
-    throw new Error(`All analysts failed for market ${market.id}`);
+    if (opinions.length === 0) {
+      throw new Error(`All analysts failed for market ${market.id}`);
+    }
   }
 
-  // Step 3: Aggregate with Opus 4.7 — uses analyst panel + MiroFish swarm stats
-  const agg = await aggregateOpinions(market, opinions, contextBlock, miroFish);
+  // When analysts_only, drop any miroFish data even if provided
+  const effectiveMiroFish = mode === 'analysts_only' ? null : miroFish;
+
+  if (mode === 'mirofish_only' && (!effectiveMiroFish?.swarmStats || effectiveMiroFish.swarmStats.sampleSize < 3)) {
+    throw new Error(`MiroFish swarm returned no usable data for market ${market.id}`);
+  }
+
+  // Step 3: aggregate — chief analyst synthesizes whatever signals are available
+  const agg = await aggregateOpinions(market, opinions, contextBlock, effectiveMiroFish);
 
   const edge = Math.abs(agg.consensusProb - market.yesPrice);
   const recommendedSide =
@@ -264,7 +278,7 @@ export async function analyseMarket(
       ? 'YES'
       : 'NO';
 
-  const sw = miroFish?.swarmStats;
+  const sw = effectiveMiroFish?.swarmStats;
 
   return {
     marketId:    market.id,
@@ -280,7 +294,7 @@ export async function analyseMarket(
     endDate:     market.endDate,
     daysLeft:    market.daysLeft,
     analystCount: opinions.length,
-    miroFishEnhanced:   miroFish !== null && (sw !== null || miroFish.report !== null),
+    miroFishEnhanced:   effectiveMiroFish !== null && (sw !== null || effectiveMiroFish.report !== null),
     miroFishAgentCount: sw?.agentCount,
     miroFishMeanProb:   sw?.meanProb,
     miroFishStdDev:     sw?.stdDev,

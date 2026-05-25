@@ -42,8 +42,8 @@ export type ModelId  = (typeof MODELS)[ModelKey];
 // Reasoning/synthesis tasks get Opus. Live social signals use Grok.
 export const AGENT_MODELS: Record<string, string> = {
   // Prediction Tab
-  prediction_analyst:    MODELS.classifier,  // 10 parallel generateObject — v3.2 direct routing (terminus → Bedrock rejects temperature)
-  prediction_aggregator: MODELS.classifier,  // Chief Analyst — v3.2 direct routing (Opus 4.7 → Bedrock rejects temperature)
+  prediction_analyst:    MODELS.exacto,      // 10 parallel generateObject — terminus-exacto optimized for structured JSON
+  prediction_aggregator: MODELS.reasoner_ds, // Chief Analyst — r1-0528 deep reasoning for synthesis
   prediction_social:     MODELS.grok,        // live X/Twitter signal
 
   // Scanners (classification — fast + cheap)
@@ -65,7 +65,7 @@ export const AGENT_MODELS: Record<string, string> = {
 // Main LLM = agent reasoning during simulation rounds.
 // Boost LLM = parallel profile generation (needs speed, not quality).
 export const MIROFISH_MODELS = {
-  main:  MODELS.classifier,   // deepseek-v3.2 — solid reasoning for social agents
+  main:  MODELS.grok,          // grok-4.20-non-reasoning — trained on X/Twitter, ideal for social sim
   boost: MODELS.fast,         // deepseek-v4-flash — fastest for parallel profile gen
 } as const;
 

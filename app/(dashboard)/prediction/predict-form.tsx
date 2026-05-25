@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PredictionCard } from './prediction-card';
 import { Search, Sparkles, X } from 'lucide-react';
-import type { Prediction } from '@/lib/agents/prediction';
+import type { Prediction, PredictMode } from '@/lib/agents/prediction';
 
 type SwarmDepth = 'quick' | 'standard' | 'deep' | 'max';
 
@@ -14,16 +14,23 @@ const DEPTH_OPTIONS: { value: SwarmDepth; label: string; agents: number; time: s
   { value: 'max',      label: 'Max',      agents: 500, time: '~90 min' },
 ];
 
+const MODE_OPTIONS: { value: PredictMode; label: string; desc: string }[] = [
+  { value: 'analysts_only', label: '10 Analysts',  desc: 'Fast · no swarm' },
+  { value: 'mirofish_only', label: 'MiroFish',     desc: 'Swarm only · no analysts' },
+  { value: 'both',          label: 'Both',          desc: 'Full pipeline' },
+];
+
 type State =
   | { phase: 'idle' }
   | { phase: 'submitting' }
-  | { phase: 'polling'; jobId: string; question: string; isRealMarket: boolean; depth: SwarmDepth }
+  | { phase: 'polling'; jobId: string; question: string; isRealMarket: boolean; depth: SwarmDepth; mode: PredictMode }
   | { phase: 'done'; prediction: Prediction }
   | { phase: 'error'; message: string };
 
 export function PredictForm() {
   const [input, setValue]   = useState('');
   const [depth, setDepth]   = useState<SwarmDepth>('standard');
+  const [mode,  setMode]    = useState<PredictMode>('both');
   const [state, setState]   = useState<State>({ phase: 'idle' });
   const intervalRef         = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -54,14 +61,14 @@ export function PredictForm() {
       const res  = await fetch('/api/predict-custom', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: trimmed, depth }),
+        body: JSON.stringify({ input: trimmed, depth, mode }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({})) as { error?: string };
         throw new Error(err.error ?? `Server error ${res.status}`);
       }
       const data = await res.json() as { jobId: string; question: string; isRealMarket: boolean };
-      setState({ phase: 'polling', ...data, depth });
+      setState({ phase: 'polling', ...data, depth, mode });
     } catch (err) {
       setState({ phase: 'error', message: String(err instanceof Error ? err.message : err) });
     }
@@ -85,7 +92,32 @@ export function PredictForm() {
       </div>
 
       <div className="p-4 space-y-3">
-        {/* Depth selector */}
+        {/* Mode toggle */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-muted-foreground/60 shrink-0">Engine:</span>
+          {MODE_OPTIONS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setMode(m.value)}
+              disabled={isLoading}
+              title={m.desc}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+                mode === m.value
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-muted/40 text-muted-foreground hover:text-foreground border border-transparent'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground/40 ml-1">
+            {MODE_OPTIONS.find((m) => m.value === mode)?.desc}
+          </span>
+        </div>
+
+        {/* Depth selector — hidden when analysts_only (no swarm) */}
+        {mode !== 'analysts_only' && (
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-muted-foreground/60 shrink-0">Swarm depth:</span>
           {DEPTH_OPTIONS.map((d) => (
@@ -107,6 +139,7 @@ export function PredictForm() {
             {DEPTH_OPTIONS.find((d) => d.value === depth)?.time}
           </span>
         </div>
+        )}
 
         <form onSubmit={handleSubmit} className="flex gap-2">
           <div className="relative flex-1">
@@ -136,7 +169,11 @@ export function PredictForm() {
               <span className="text-foreground font-medium">Analyzing: </span>
               <span className="truncate">{state.question}</span>
               {state.isRealMarket && <span className="text-blue-400 ml-1">[real market]</span>}
-              <span className="text-muted-foreground/50 ml-1">· 10 analysts + MiroFish {state.phase === 'polling' ? `×${DEPTH_OPTIONS.find(d=>d.value===state.depth)?.agents}` : ''} running…</span>
+              <span className="text-muted-foreground/50 ml-1">
+                {state.phase === 'polling' && state.mode === 'analysts_only' && '· 10 analysts running…'}
+                {state.phase === 'polling' && state.mode === 'mirofish_only' && `· MiroFish ×${DEPTH_OPTIONS.find(d=>d.value===state.depth)?.agents} running…`}
+                {state.phase === 'polling' && state.mode === 'both' && `· 10 analysts + MiroFish ×${DEPTH_OPTIONS.find(d=>d.value===state.depth)?.agents} running…`}
+              </span>
             </div>
           </div>
         )}

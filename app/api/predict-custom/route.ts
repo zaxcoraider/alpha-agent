@@ -3,6 +3,7 @@ import { fetchMarketBySlug } from '@/lib/sources/polymarket';
 import { env } from '@/lib/env';
 import { randomUUID } from 'crypto';
 import type { SwarmDepth } from '@/lib/sources/mirofish';
+import type { PredictMode } from '@/lib/agents/prediction';
 
 function extractPolymarketSlug(input: string): string | null {
   try {
@@ -16,7 +17,7 @@ function extractPolymarketSlug(input: string): string | null {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const { input, depth = 'standard' } = await req.json() as { input: string; depth?: SwarmDepth };
+  const { input, depth = 'standard', mode = 'both' } = await req.json() as { input: string; depth?: SwarmDepth; mode?: PredictMode };
   if (!input?.trim()) {
     return NextResponse.json({ error: 'input is required' }, { status: 400 });
   }
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       'Content-Type':  'application/json',
       'Authorization': `Bearer ${env.ACCESS_TOKEN ?? ''}`,
     },
-    body: JSON.stringify({ question, jobId, market: market ?? null, depth }),
+    body: JSON.stringify({ question, jobId, market: market ?? null, depth, mode }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
 

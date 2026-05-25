@@ -3,7 +3,7 @@
 // Start with: bash scripts/run-predict-server.sh
 
 import http from 'http';
-import { analyseMarket } from '@/lib/agents/prediction';
+import { analyseMarket, type PredictMode } from '@/lib/agents/prediction';
 import { runMiroFishAnalysis, type SwarmDepth } from '@/lib/sources/mirofish';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
 import { db } from '@/lib/db/client';
@@ -27,13 +27,13 @@ const server = http.createServer((req, res) => {
   req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
   req.on('end', () => {
     try {
-      const { question, jobId, market: rawMarket, depth = 'standard' } =
-        JSON.parse(body) as { question: string; jobId: string; market: ParsedMarket | null; depth?: SwarmDepth };
+      const { question, jobId, market: rawMarket, depth = 'standard', mode = 'both' } =
+        JSON.parse(body) as { question: string; jobId: string; market: ParsedMarket | null; depth?: SwarmDepth; mode?: PredictMode };
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ accepted: true, jobId }));
 
-      runCustomPredict(question, jobId, rawMarket, depth).catch(console.error);
+      runCustomPredict(question, jobId, rawMarket, depth, mode).catch(console.error);
     } catch {
       res.writeHead(400); res.end('Bad request');
     }
@@ -45,8 +45,9 @@ async function runCustomPredict(
   jobId: string,
   rawMarket: ParsedMarket | null,
   depth: SwarmDepth,
+  mode: PredictMode = 'both',
 ) {
-  console.log(`[predict-server] Starting custom-${jobId} depth=${depth} q="${question.slice(0, 60)}"`);
+  console.log(`[predict-server] Starting custom-${jobId} depth=${depth} mode=${mode} q="${question.slice(0, 60)}"`);
 
   const market: ParsedMarket = rawMarket ?? {
     id:          `custom-${jobId}`,
@@ -65,8 +66,11 @@ async function runCustomPredict(
     const ctx          = await buildPredictionContext(question).catch(() => null);
     const contextBlock = ctx ? formatContextBlock(ctx) : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
 
-    const miroFish   = await runMiroFishAnalysis(market, contextBlock, depth).catch(() => null);
-    const prediction = await analyseMarket(market, miroFish, contextBlock);
+    // Skip MiroFish when analysts_only — saves ~5-30 min
+    const miroFish = mode === 'analysts_only'
+      ? null
+      : await runMiroFishAnalysis(market, contextBlock, depth).catch(() => null);
+    const prediction = await analyseMarket(market, miroFish, contextBlock, mode);
 
     await db.insert(scanResults).values({
       agent:      'prediction',
