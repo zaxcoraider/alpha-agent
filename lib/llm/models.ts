@@ -42,7 +42,7 @@ export type ModelId  = (typeof MODELS)[ModelKey];
 // Reasoning/synthesis tasks get Opus. Live social signals use Grok.
 export const AGENT_MODELS: Record<string, string> = {
   // Prediction Tab
-  prediction_analyst:    MODELS.exacto,      // 10 parallel generateObject — terminus-exacto optimized for structured JSON
+  prediction_analyst:    MODELS.classifier,  // 10 parallel generateObject — deepseek-v3.2 confirmed working
   prediction_aggregator: MODELS.reasoner_ds, // Chief Analyst — r1-0528 deep reasoning for synthesis
   prediction_social:     MODELS.grok,        // live X/Twitter signal
 
