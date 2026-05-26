@@ -75,56 +75,43 @@ async function analyzeToken(raw: RawMemeToken, _grokContext: string): Promise<Me
     const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
       abortSignal: AbortSignal.timeout(45_000),
-      prompt: `Analyze this meme coin. Reply with ONLY a JSON object — no markdown, no explanation.
+      prompt: `You are a meme coin analyst. Analyze the token below and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 
-Token: ${raw.name} ($${raw.ticker}) on ${raw.chain}
-Contract: ${raw.contractAddress ?? 'unknown'} | Mcap: ${mcap}
-1h: ${raw.priceChange1h ?? 'n/a'}% | 24h: ${raw.priceChange24h ?? 'n/a'}%
-Vol 24h: ${raw.volumeUsd24h ? `$${(raw.volumeUsd24h/1000).toFixed(0)}K` : 'n/a'} | Liq: ${raw.liquidity ? `$${(raw.liquidity/1000).toFixed(0)}K` : 'n/a'}
-Top10 holders: ${raw.topHolderPct ?? 'n/a'}% | Age: ${raw.deployedHoursAgo?.toFixed(1) ?? 'n/a'}h
-CT: ${raw.ctMentions} mentions @ ${raw.ctVelocity.toFixed(1)}/hr | KOL: ${raw.mentionedByKOL}
+TOKEN DATA:
+Name: ${raw.name} | Ticker: $${raw.ticker} | Chain: ${raw.chain}
+Market cap: ${mcap} | Contract: ${raw.contractAddress ?? 'unknown'}
+Price 1h: ${raw.priceChange1h ?? '?'}% | 24h: ${raw.priceChange24h ?? '?'}%
+Volume 24h: $${((raw.volumeUsd24h ?? 0) / 1000).toFixed(0)}K | Liquidity: $${((raw.liquidity ?? 0) / 1000).toFixed(0)}K
+Top 10 holders: ${raw.topHolderPct ?? '?'}% | Age: ${raw.deployedHoursAgo?.toFixed(1) ?? '?'}h
+CT mentions: ${raw.ctMentions} @ ${raw.ctVelocity.toFixed(1)}/hr | KOL: ${raw.mentionedByKOL}
 Narrative: ${raw.narrative}
 
-Return this exact JSON (use ONLY the allowed values shown):
-{
-  "name": "${raw.name}",
-  "ticker": "${raw.ticker}",
-  "chain": "${raw.chain}",
-  "contractAddress": ${raw.contractAddress ? `"${raw.contractAddress}"` : 'null'},
-  "marketCapUsd": ${raw.marketCapUsd ?? null},
-  "priceUsd": ${raw.priceUsd ?? null},
-  "priceChange1h": ${raw.priceChange1h ?? null},
-  "priceChange24h": ${raw.priceChange24h ?? null},
-  "volumeUsd24h": ${raw.volumeUsd24h ?? null},
-  "liquidity": ${raw.liquidity ?? null},
-  "holderCount": ${raw.holderCount ?? null},
-  "topHolderPct": ${raw.topHolderPct ?? null},
-  "deployedHoursAgo": ${raw.deployedHoursAgo ?? null},
-  "ctMentions": ${raw.ctMentions},
-  "ctVelocity": ${raw.ctVelocity},
-  "mentionedByKOL": ${raw.mentionedByKOL},
-  "kolHandles": ${JSON.stringify(raw.kolHandles)},
-  "narrative": "<1 sentence describing the meme narrative>",
-  "narrativeScore": <0-25>,
-  "kolScore": <0-25>,
-  "safetyScore": <0-25>,
-  "volumeScore": <0-25>,
-  "gemScore": <0-100, sum of 4 scores>,
-  "gemBreakdown": "<why this score, max 300 chars>",
-  "rugRisk": "<exactly one of: low, medium, high, critical>",
-  "rugFlags": ["<flag1>", "<flag2>"],
-  "category": "<exactly one of: new_gem, trending, fading, pumped>",
-  "priceTarget": "<optional target price>",
-  "watchAction": "<exactly one of: buy_small, watch, avoid>",
-  "watchReason": "<reason, max 150 chars>",
-  "entryMarketCap": "<e.g. under $500K>",
-  "entryStrategy": "<concrete entry/exit strategy, max 200 chars>",
-  "x2Target": "<2x price target or null>",
-  "x5Target": "<5x price target or null>",
-  "developerFlags": [],
-  "dexUrl": ${raw.dexUrl ? `"${raw.dexUrl}"` : 'null'},
-  "source": "${raw.source}"
-}`,
+REQUIRED JSON FIELDS (use exact field names and allowed values):
+- name: string
+- ticker: string
+- chain: must be one of "sol" "eth" "base" "bnb"
+- narrativeScore: integer 0-25
+- kolScore: integer 0-25
+- safetyScore: integer 0-25
+- volumeScore: integer 0-25
+- gemScore: integer 0-100 (sum of 4 scores)
+- gemBreakdown: string (max 300 chars, why this score)
+- rugRisk: must be one of "low" "medium" "high" "critical"
+- rugFlags: array of strings (rug warning flags, can be empty array)
+- category: must be one of "new_gem" "trending" "fading" "pumped"
+- watchAction: must be one of "buy_small" "watch" "avoid"
+- watchReason: string (max 150 chars)
+- entryStrategy: string (concrete buy/sell advice, max 200 chars)
+- developerFlags: array of strings (can be empty array)
+- narrative: string (1 sentence about the meme theme)
+- mentionedByKOL: boolean
+- kolHandles: array of strings
+- ctMentions: integer
+- ctVelocity: number
+- source: "${raw.source}"
+
+Also include these optional fields if known (use null if unknown):
+- contractAddress, marketCapUsd, priceUsd, priceChange1h, priceChange24h, volumeUsd24h, liquidity, holderCount, topHolderPct, deployedHoursAgo, priceTarget, entryMarketCap, x2Target, x5Target, dexUrl`,
     });
 
     // Extract JSON from response

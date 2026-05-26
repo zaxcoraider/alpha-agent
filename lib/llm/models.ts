@@ -16,8 +16,8 @@ export const MODELS = {
   reasoner_ds: 'deepseek/deepseek-r1-0528',       // deep math + crypto reasoning
 
   // ── xAI Grok ───────────────────────────────────────────────────────────────
-  grok:        'xai/grok-4.20-non-reasoning',     // live X/Twitter signal (social agent)
-  grok_think:  'xai/grok-4.20-reasoning',         // Grok with extended thinking
+  grok:        'xai/grok-4.3',                    // live X/Twitter signal — 4.20 is 404 on DGrid
+  grok_think:  'xai/grok-4.3',                    // fallback to same until 4.20 is re-listed
 
   // ── Google ─────────────────────────────────────────────────────────────────
   vision:      'google/gemini-2.5-pro',           // vision + long-context tasks

@@ -50,37 +50,34 @@ async function scoreEvent(raw: RawXEvent, _grokContext: string): Promise<XEvent 
     const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
       abortSignal: AbortSignal.timeout(45_000),
-      prompt: `Score this crypto X event. Reply with ONLY a JSON object — no markdown, no explanation.
+      prompt: `You are a crypto market analyst. Score this X event and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 
+EVENT DATA:
 Type: ${raw.type} | Title: ${raw.title}
-KOL: ${raw.kolHandle ?? 'n/a'} (${raw.followersCount ?? '?'} followers)
-Token: ${raw.ticker ?? 'n/a'} on ${raw.chain ?? 'any'}
-Urgency: ${raw.urgency} | Engagement: ${raw.engagementCount ?? 'unknown'}
+KOL: ${raw.kolHandle ?? 'none'} (${raw.followersCount ?? '?'} followers)
+Token: ${raw.ticker ?? 'n/a'} | Chain: ${raw.chain ?? 'any'}
+Urgency: ${raw.urgency} | Scheduled: ${raw.scheduledFor ?? 'now'}
+Engagement: ${raw.engagementCount ?? '?'} likes/RTs
 Description: ${raw.description}
+URL: ${raw.url ?? 'none'}
 
-Return this exact JSON (ONLY these allowed values):
-{
-  "type": "<one of: space, viral_thread, kol_alert, airdrop, token_unlock, listing, narrative_shift, whale_move>",
-  "title": "${raw.title.replace(/"/g, "'")}",
-  "description": "<summary max 250 chars>",
-  "kolHandle": ${raw.kolHandle ? `"${raw.kolHandle}"` : 'null'},
-  "followersCount": ${raw.followersCount ?? null},
-  "ticker": ${raw.ticker ? `"${raw.ticker}"` : 'null'},
-  "chain": ${raw.chain ? `"${raw.chain}"` : 'null'},
-  "scheduledFor": ${raw.scheduledFor ? `"${raw.scheduledFor}"` : 'null'},
-  "url": ${raw.url ? `"${raw.url}"` : 'null'},
-  "urgency": "<one of: live, today, this_week, upcoming>",
-  "engagementCount": ${raw.engagementCount ?? null},
-  "narrativeTags": ["<tag1>"],
-  "ctSentiment": "<one of: very_bullish, bullish, neutral, bearish, very_bearish>",
-  "relevanceScore": <1-10>,
-  "relevanceReason": "<why this score, max 150 chars>",
-  "actionable": <true or false>,
-  "actionSummary": "<one concrete sentence what to do, max 150 chars>",
-  "priceImpact": "<one of: bullish, bearish, neutral, unknown>",
-  "impactReason": "<why, max 100 chars>",
-  "source": "${raw.source}"
-}`,
+REQUIRED JSON FIELDS (exact names and allowed values):
+- type: must be one of "space" "viral_thread" "kol_alert" "airdrop" "token_unlock" "listing" "narrative_shift" "whale_move"
+- title: string (the event title)
+- description: string (max 250 chars)
+- urgency: must be one of "live" "today" "this_week" "upcoming"
+- relevanceScore: integer 1-10 (10=Binance listing/top KOL, 7-9=major event, 4-6=moderate, 1-3=low signal)
+- relevanceReason: string (max 150 chars, why this score)
+- actionable: boolean (true if user can do something concrete now)
+- actionSummary: string (one concrete action sentence, max 150 chars)
+- priceImpact: must be one of "bullish" "bearish" "neutral" "unknown"
+- impactReason: string (max 100 chars)
+- ctSentiment: must be one of "very_bullish" "bullish" "neutral" "bearish" "very_bearish"
+- narrativeTags: array of strings (macro themes, can be empty)
+- source: "${raw.source}"
+
+Optional fields (use null if unknown):
+- kolHandle, followersCount, ticker, chain, scheduledFor, url, engagementCount`,
     });
 
     const match = text.match(/\{[\s\S]*\}/);

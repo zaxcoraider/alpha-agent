@@ -70,47 +70,42 @@ async function analyzeProject(raw: RawNFTProject, _grokContext: string): Promise
     const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
       abortSignal: AbortSignal.timeout(45_000),
-      prompt: `Analyze this NFT project. Reply with ONLY a JSON object — no markdown, no explanation.
+      prompt: `You are an NFT alpha analyst. Analyze this mint and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 
-Project: ${raw.name} on ${raw.chain}
+NFT DATA:
+Name: ${raw.name} | Chain: ${raw.chain}
 Price: ${raw.mintPrice} ${raw.mintPriceCurrency} | Supply: ${raw.supply ?? 'unknown'}
 Status: ${raw.mintStatus} | Contract: ${raw.contractAddress ?? 'none'} (verified: ${raw.contractVerified})
 Team doxxed: ${raw.teamDoxxed} | CT: ${raw.ctMentions} mentions @ ${raw.ctVelocity}/hr
-KOL: ${raw.mentionedByKOL} | Whales: ${raw.whaleActivity}
-Link: ${raw.mintLink ?? 'none'} | Source: ${raw.source}
+KOL: ${raw.mentionedByKOL} | Whales active: ${raw.whaleActivity}
+Mint link: ${raw.mintLink ?? 'none'} | Source: ${raw.source}
 
-Return this exact JSON (ONLY these allowed values):
-{
-  "name": "${raw.name.replace(/"/g, "'")}",
-  "chain": "${raw.chain}",
-  "mintPrice": ${raw.mintPrice},
-  "mintPriceCurrency": "${raw.mintPriceCurrency}",
-  "supply": ${raw.supply ?? null},
-  "mintStatus": "<one of: not_started, live, ending_soon, sold_out>",
-  "mintLink": ${raw.mintLink ? `"${raw.mintLink}"` : 'null'},
-  "contractAddress": ${raw.contractAddress ? `"${raw.contractAddress}"` : 'null'},
-  "contractVerified": ${raw.contractVerified},
-  "teamDoxxed": ${raw.teamDoxxed},
-  "ctMentions": ${raw.ctMentions},
-  "ctVelocity": ${raw.ctVelocity},
-  "mentionedByKOL": ${raw.mentionedByKOL},
-  "kolHandles": ${JSON.stringify(raw.kolHandles)},
-  "alphaScore": <0-100>,
-  "alphaBreakdown": "<why this score, max 300 chars>",
-  "rugRisk": "<one of: low, medium, high, critical>",
-  "rugFlags": ["<flag>"],
-  "futurePotential": <1-10>,
-  "floorPrediction7d": "<e.g. 0.05 ETH or null>",
-  "similarTo": "<e.g. early Azuki or null>",
-  "isFree": ${raw.mintPrice === 0},
-  "mintStrategy": "<concrete advice max 250 chars>",
-  "bluechipScore": <0-100>,
-  "nextSteps": "<one sentence what to do now, max 150 chars>",
-  "whaleActivity": ${raw.whaleActivity},
-  "whaleWallets": ${JSON.stringify(raw.whaleWallets)},
-  "gasEstimate": ${raw.gasEstimate ? `"${raw.gasEstimate}"` : 'null'},
-  "source": "${raw.source}"
-}`,
+REQUIRED JSON FIELDS (exact names and allowed values):
+- name: string
+- chain: must be one of "sol" "eth" "base" "arbitrum" "polygon" "bnb"
+- mintPrice: number (0 for free)
+- mintPriceCurrency: string
+- mintStatus: must be one of "not_started" "live" "ending_soon" "sold_out"
+- contractVerified: boolean
+- teamDoxxed: boolean
+- ctMentions: integer
+- ctVelocity: number
+- mentionedByKOL: boolean
+- kolHandles: array of strings (can be empty)
+- alphaScore: integer 0-100
+- alphaBreakdown: string (max 300 chars)
+- rugRisk: must be one of "low" "medium" "high" "critical"
+- rugFlags: array of strings (can be empty)
+- futurePotential: integer 1-10
+- isFree: boolean (true if mintPrice is 0)
+- mintStrategy: string (concrete advice max 250 chars)
+- bluechipScore: integer 0-100
+- nextSteps: string (one sentence max 150 chars)
+- whaleActivity: boolean
+- whaleWallets: array of strings (can be empty)
+- source: "${raw.source}"
+
+Optional (use null if unknown): supply, mintLink, contractAddress, floorPrediction7d, similarTo, gasEstimate`,
     });
 
     const match = text.match(/\{[\s\S]*\}/);
