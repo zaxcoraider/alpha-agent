@@ -64,7 +64,7 @@ async function analyzeToken(raw: RawMemeToken, grokContext: string): Promise<Mem
       : 'unknown';
 
     const { object } = await generateObject({
-      model:       dgridNoTemp(MODELS.balanced),
+      model:       dgrid(MODELS.classifier),
       schema:      MemeTokenSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),

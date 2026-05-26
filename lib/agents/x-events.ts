@@ -39,7 +39,7 @@ export type XEvent = z.infer<typeof XEventSchema>;
 async function scoreEvent(raw: RawXEvent, grokContext: string): Promise<XEvent | null> {
   try {
     const { object } = await generateObject({
-      model:       dgridNoTemp(MODELS.balanced),
+      model:       dgrid(MODELS.classifier),
       schema:      XEventSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),

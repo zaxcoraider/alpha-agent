@@ -56,7 +56,7 @@ export type NFTMint = z.infer<typeof NFTMintSchema>;
 async function analyzeProject(raw: RawNFTProject, grokContext: string): Promise<NFTMint | null> {
   try {
     const { object } = await generateObject({
-      model:       dgridNoTemp(MODELS.balanced),
+      model:       dgrid(MODELS.classifier),
       schema:      NFTMintSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
