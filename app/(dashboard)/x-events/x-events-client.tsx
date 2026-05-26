@@ -333,9 +333,8 @@ export function XEventsClient({ events }: XEventsClientProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-start">
-        {/* Type chips */}
-        <div className="flex flex-wrap gap-1">
+      <div className="flex flex-col gap-2">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {types.map((t) => {
             const label = t === 'all' ? 'All Types' : TYPE_CONFIG[t].label;
             const count = t !== 'all' ? typeCounts[t] : undefined;
@@ -345,31 +344,22 @@ export function XEventsClient({ events }: XEventsClientProps) {
             );
           })}
         </div>
-
-        {/* Urgency */}
-        <div className="flex gap-1">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {urgencies.map((u) => (
             <Chip key={u}
               label={u === 'all' ? 'All Time' : URGENCY_CONFIG[u].label}
               active={urgency === u} color="rose" onClick={() => setUrgency(u)} />
           ))}
-        </div>
-
-        {/* Impact */}
-        <div className="flex gap-1">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {impacts.map((i) => (
             <Chip key={i}
               label={i === 'all' ? 'All Impact' : IMPACT_CONFIG[i].label.replace('↑ ', '').replace('↓ ', '').replace('→ ', '')}
               active={impact === i} color="emerald" onClick={() => setImpact(i)} />
           ))}
-        </div>
-
-        {/* Actionable toggle */}
-        <Chip label="⚡ Actionable Only" active={actionableOnly} color="orange"
-          onClick={() => setActionableOnly((p) => !p)} />
-
-        {/* Sort */}
-        <div className="flex gap-1 ml-auto">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
+          <Chip label="⚡ Actionable Only" active={actionableOnly} color="orange"
+            onClick={() => setActionableOnly((p) => !p)} />
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {sorts.map((s) => (
             <Chip key={s.key} label={s.label} active={sort === s.key} color="sky"
               onClick={() => setSort(s.key)} />

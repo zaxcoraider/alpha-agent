@@ -38,7 +38,7 @@ export function Sidebar() {
   }, {});
 
   return (
-    <aside className="flex h-screen w-56 flex-col border-r border-border bg-card">
+    <aside className="hidden md:flex h-screen w-56 flex-col border-r border-border bg-card">
       {/* Brand */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-border">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20 glow-emerald-sm shrink-0">

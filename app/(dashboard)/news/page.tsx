@@ -57,7 +57,7 @@ export default async function NewsPage() {
 
       {/* Stats */}
       {items.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-lg border border-border bg-card p-3 text-center">
             <p className="text-2xl font-bold">{items.length}</p>
             <p className="text-xs text-muted-foreground">Articles</p>

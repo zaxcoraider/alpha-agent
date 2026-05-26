@@ -297,43 +297,32 @@ export function MintsClient({ mints }: MintsClientProps) {
       )}
 
       {/* Filter toolbar */}
-      <div className="flex flex-wrap gap-3 items-start">
-
-        {/* Chain chips */}
-        <div className="flex flex-wrap gap-1">
+      <div className="flex flex-col gap-2">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {chains.map((c) => (
             <Chip
               key={c} label={c === 'all' ? 'All Chains' : CHAIN_LABELS[c] ?? c.toUpperCase()}
               active={chain === c} color="emerald" onClick={() => setChain(c)}
             />
           ))}
+          <span className="w-px bg-border shrink-0 mx-0.5" />
+          <Chip label="🆓 Free Only" active={freeOnly} color="emerald" onClick={() => setFreeOnly((p) => !p)} />
         </div>
-
-        {/* Free toggle */}
-        <Chip label="🆓 Free Only" active={freeOnly} color="emerald" onClick={() => setFreeOnly((p) => !p)} />
-
-        {/* Status */}
-        <div className="flex gap-1">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {statusOptions.map((s) => (
             <Chip
               key={s} label={s === 'all' ? 'All Status' : STATUS_LABELS[s] ?? s}
               active={status === s} color="sky" onClick={() => setStatus(s)}
             />
           ))}
-        </div>
-
-        {/* Rug risk */}
-        <div className="flex gap-1">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {rugOptions.map((r) => (
             <Chip
               key={r} label={r === 'all' ? 'All Risk' : r.charAt(0).toUpperCase() + r.slice(1)}
               active={rug === r} color="orange" onClick={() => setRug(r)}
             />
           ))}
-        </div>
-
-        {/* Sort */}
-        <div className="flex gap-1 ml-auto">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {sortOptions.map((s) => (
             <Chip key={s.key} label={s.label} active={sort === s.key} color="violet" onClick={() => setSort(s.key)} />
           ))}

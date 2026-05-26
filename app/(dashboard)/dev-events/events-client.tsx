@@ -290,7 +290,7 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 md:gap-3">
         <div className="rounded-xl border border-border bg-card px-4 py-3 text-center">
           <p className="text-xl font-bold">{opportunities.length}</p>
           <p className="text-xs text-muted-foreground">Opportunities</p>

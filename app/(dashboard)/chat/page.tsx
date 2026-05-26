@@ -448,10 +448,10 @@ export default function ChatPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
+    <div className="h-[calc(100dvh-7rem)] md:h-[calc(100vh-3rem)] flex flex-col overflow-hidden">
 
       {/* ── Top header ── */}
-      <div className="flex items-center justify-between pb-3 border-b border-border shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border shrink-0">
         <div>
           <h1 className="text-xl font-bold">Chat</h1>
           <p className="text-xs text-muted-foreground">DGrid · {totalModels} models</p>
@@ -750,7 +750,7 @@ export default function ChatPage() {
                         const done = turn.done[mid];
                         const key  = `${turn.id}-${mid}`;
                         return (
-                          <div key={mid} className="min-w-[220px] flex-1 rounded-xl border border-border bg-card flex flex-col overflow-hidden">
+                          <div key={mid} className="min-w-[200px] flex-1 rounded-xl border border-border bg-card flex flex-col overflow-hidden">
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/10 shrink-0">
                               <span className={cn('text-[10px] font-bold', getProviderBadge(mid))}>{getProviderName(mid)}</span>
                               <span className="text-[10px] text-muted-foreground flex-1 truncate">{getLabel(mid)}</span>
@@ -803,10 +803,10 @@ export default function ChatPage() {
           STRATEGIST MODE
           ════════════════════════════════════════ */}
       {topMode === 'strategist' && (
-        <div className="flex-1 overflow-hidden flex gap-4 pt-2 min-h-0">
+        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-4 pt-2 min-h-0">
 
           {/* ── Left panel: input ── */}
-          <div className={cn('flex flex-col gap-3 shrink-0 overflow-y-auto', plan ? 'w-[340px]' : 'flex-1 max-w-2xl mx-auto')}>
+          <div className={cn('flex flex-col gap-3 overflow-y-auto', plan ? 'w-full lg:w-[340px] lg:shrink-0' : 'flex-1 max-w-2xl mx-auto')}>
 
             {/* Header */}
             <div className="flex items-center gap-2">
@@ -863,7 +863,7 @@ export default function ChatPage() {
               )}
               <div className="space-y-2">
                 {resources.map((r) => (
-                  <div key={r.id} className="flex gap-1.5">
+                  <div key={r.id} className="flex flex-wrap gap-1.5">
                     <div className="flex items-center gap-1.5 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5">
                       <Link size={10} className="text-muted-foreground/50 shrink-0" />
                       <input

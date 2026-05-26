@@ -359,44 +359,32 @@ export function MemesClient({ tokens }: MemesClientProps) {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-start">
-        {/* Chain */}
-        <div className="flex flex-wrap gap-1">
+      <div className="flex flex-col gap-2">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {chains.map((c) => (
             <Chip key={c} label={c === 'all' ? 'All Chains' : CHAIN_LABELS[c] ?? c.toUpperCase()}
               active={chain === c} color="emerald" onClick={() => setChain(c)} />
           ))}
-        </div>
-
-        {/* Category */}
-        <div className="flex gap-1">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {cats.map((c) => (
             <Chip key={c}
               label={c === 'all' ? 'All Types' : CATEGORY_LABELS[c]}
               active={category === c} color="sky" onClick={() => setCategory(c)} />
           ))}
         </div>
-
-        {/* Action */}
-        <div className="flex gap-1">
+        <div className="flex overflow-x-auto gap-1 pb-1" style={{ scrollbarWidth: 'none' }}>
           {actions.map((a) => (
             <Chip key={a}
               label={a === 'all' ? 'All Actions' : ACTION_LABELS[a]}
               active={action === a} color="violet" onClick={() => setAction(a)} />
           ))}
-        </div>
-
-        {/* Rug */}
-        <div className="flex gap-1">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {rugs.map((r) => (
             <Chip key={r}
               label={r === 'all' ? 'All Risk' : r.charAt(0).toUpperCase() + r.slice(1)}
               active={rug === r} color="orange" onClick={() => setRug(r)} />
           ))}
-        </div>
-
-        {/* Sort */}
-        <div className="flex gap-1 ml-auto">
+          <span className="w-px bg-border shrink-0 mx-0.5" />
           {sorts.map((s) => (
             <Chip key={s.key} label={s.label} active={sort === s.key} color="rose"
               onClick={() => setSort(s.key)} />
