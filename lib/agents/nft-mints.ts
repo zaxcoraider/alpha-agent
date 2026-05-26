@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -38,10 +38,10 @@ export const NFTMintSchema = z.object({
   floorPrediction7d: z.string().optional(),
   similarTo:         z.string().optional(),
 
-  isFree:          z.boolean(),              // mintPrice === 0 — free mint alert
-  mintStrategy:    z.string().max(300),      // concrete advice: how many to mint, when to sell
-  bluechipScore:   z.number().int().min(0).max(100), // probability of becoming blue chip
-  nextSteps:       z.string().max(200),      // what to do right now
+  isFree:          z.boolean(),
+  mintStrategy:    z.string().max(300),
+  bluechipScore:   z.number().int().min(0).max(100),
+  nextSteps:       z.string().max(200),
 
   whaleActivity: z.boolean(),
   whaleWallets:  z.array(z.string()),
@@ -51,12 +51,12 @@ export const NFTMintSchema = z.object({
 
 export type NFTMint = z.infer<typeof NFTMintSchema>;
 
-// ── Analysis prompt (Claude Opus) ─────────────────────────────────────────────
+// ── Per-project analysis (Sonnet 4.6 + Grok live CT context) ─────────────────
 
-async function analyzeProject(raw: RawNFTProject): Promise<NFTMint | null> {
+async function analyzeProject(raw: RawNFTProject, grokContext: string): Promise<NFTMint | null> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),       // Sonnet 4.6 — fast + no temp issue
+      model:       dgrid(MODELS.balanced),
       schema:      NFTMintSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
@@ -76,6 +76,9 @@ Whale activity: ${raw.whaleActivity} — wallets: ${raw.whaleWallets.join(', ') 
 Mint link: ${raw.mintLink ?? 'not provided'}
 Source: ${raw.source}
 
+LIVE CT CONTEXT (from Grok X search right now):
+${grokContext || 'No real-time CT data available.'}
+
 ── ALPHA SCORE (0–100) ──
 Start from 0, add:
 +20 if fewer than 20 total CT mentions (true early alpha)
@@ -88,47 +91,33 @@ Start from 0, add:
 +5  if team has successful past project
 
 ── RUG RISK DETECTION ──
-Check each flag:
-- Anonymous team (unknown identity): +1 flag
-- Unverified contract: +1 flag
-- High price + no audit: +1 flag
-- Dev wallet likely >20% supply: +1 flag
-- No liquidity lock or vesting: +1 flag
-- Copy-paste or unoriginal concept: +1 flag
-- Fake/bought follower signals: +1 flag
-- Impersonating successful project: +1 flag
-- X account likely < 30 days old: +1 flag
-
-0 flags → low | 1-2 flags → medium | 3-4 flags → high | 5+ flags → critical
+0 flags → low | 1-2 → medium | 3-4 → high | 5+ → critical
+Flags: anonymous team, unverified contract, high price + no audit, dev wallet >20%, no liquidity lock, copy-paste concept, fake followers, impersonating known project, X account <30 days old.
 
 ── FUTURE POTENTIAL (1–10) ──
 Consider: unique concept, chain timing, team, community signals, comparable projects.
 
 ── FLOOR PREDICTION 7d ──
-Best estimate of floor price 7 days post-mint based on comparable launches. Format as "X.XX ETH" or "X SOL".
+Best estimate of floor price 7 days post-mint. Format: "X.XX ETH" or "X SOL".
 
 ── SIMILAR TO ──
-Name the most similar successful launch this resembles in its early signal pattern (e.g. "early Azuki signals" or "early DeGods pattern"). Only if genuinely similar — null if not.
+Most similar successful early launch pattern (e.g. "early Azuki signals"). Null if not genuinely similar.
 
 ── IS FREE ──
-isFree: true if mintPrice === 0, false otherwise. Free mints are highest priority.
+isFree: true if mintPrice === 0. Free mints are highest priority.
 
 ── MINT STRATEGY ──
-Concrete advice tailored to this specific project:
+Concrete advice for this project:
 - If free: "Mint max wallet limit immediately. List 50% at 2x floor, hold rest."
 - If paid: "Only mint if KOL-backed + team doxxed. Budget max 0.05 ETH. Flip at 3x."
-- Include timing advice (mint window, expected floor timeline)
+Include timing advice (mint window, expected floor timeline).
 
 ── BLUE CHIP SCORE (0-100) ──
-Probability of becoming a recognized blue chip collection (like BAYC, Azuki, Pudgy Penguins).
-Consider: team track record, art quality signals, community strength, chain momentum, comparable launches.
-Most projects score 0-10. Only score >50 if there are exceptional signals.
+Probability of becoming a recognized blue chip (BAYC, Azuki, Pudgy Penguins level).
+Most projects score 0-10. Only >50 for exceptional signals.
 
 ── NEXT STEPS ──
-One concrete sentence of what to do RIGHT NOW:
-"Free mint live — go to [link] and mint max 5 now"
-"Add to watchlist — mint opens in 3h, set reminder"
-"Avoid — anonymous team + unverified contract + high price"
+One concrete sentence of what to do RIGHT NOW.
 
 Be precise and honest. If signals are weak, score low.`,
     });
@@ -161,22 +150,41 @@ export async function runNFTMintsScan(): Promise<{
     if (!seen.has(key)) { seen.add(key); unique.push(p); }
   }
 
-  // Analyze in batches of 3 (Claude Opus is slower/expensive — prioritize Grok finds)
+  // Grok-first, cap at 20
   const grokFirst = [
     ...unique.filter((p) => p.source === 'grok'),
     ...unique.filter((p) => p.source !== 'grok'),
-  ].slice(0, 20); // cap at 20 per scan
+  ].slice(0, 20);
 
+  // Single Grok call — live CT snapshot for all projects before analysis
+  let grokContext = '';
+  if (grokFirst.length > 0) {
+    const nameList = grokFirst.map((p) => `${p.name} (${p.chain.toUpperCase()})`).join(', ');
+    try {
+      const { text } = await generateText({
+        model:       dgrid(MODELS.grok),
+        abortSignal: AbortSignal.timeout(40_000),
+        prompt: `Search X (Twitter) right now for these NFT projects and give me a live CT update for each: ${nameList}.
+
+For each project: is it being discussed on X? Which KOLs are talking about it? Any red flags (rug warnings, team drama, contract issues)? Any positive signals (whale mints, celebrity endorsements, viral posts)? Is the mint currently live? 1-3 sentences per project. If no mentions found, say so.`,
+      });
+      grokContext = text;
+    } catch {
+      // proceed without live enrichment
+    }
+  }
+
+  // Analyze in batches of 3, passing live Grok context to each
   const mints: NFTMint[] = [];
   for (let i = 0; i < grokFirst.length; i += 3) {
     const batch   = grokFirst.slice(i, i + 3);
-    const results = await Promise.allSettled(batch.map(analyzeProject));
+    const results = await Promise.allSettled(batch.map((p) => analyzeProject(p, grokContext)));
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value) mints.push(r.value);
     }
   }
 
-  // Filter out sold out + sort by alpha score
+  // Filter sold out + sort by alpha score
   const active = mints.filter((m) => m.mintStatus !== 'sold_out');
   active.sort((a, b) => b.alphaScore - a.alphaScore);
 
