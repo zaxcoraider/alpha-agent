@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 
 export const runtime = 'nodejs';
@@ -18,12 +18,13 @@ export async function POST(req: Request) {
   const system   = typeof systemPrompt === 'string' && systemPrompt.length > 0 ? systemPrompt : DEFAULT_SYSTEM;
   const temp     = typeof temperature === 'number' ? Math.max(0, Math.min(1, temperature)) : 0.7;
 
-  // Anthropic claude-opus-4.x deprecated temperature — omit it for these models
+  // claude-opus-4.x rejects the temperature param entirely.
+  // dgridNoTemp strips it at the provider layer (AI SDK v4 defaults temperature: 0 even when omitted).
   const noTempModels = ['anthropic/claude-opus-4.7', 'anthropic/claude-opus-4.6', 'anthropic/claude-opus-4.5', 'anthropic/claude-opus-4'];
   const supportsTemp = !noTempModels.includes(modelId);
 
   const result = streamText({
-    model:       dgrid(modelId),
+    model:       supportsTemp ? dgrid(modelId) : dgridNoTemp(modelId),
     messages:    messages as Parameters<typeof streamText>[0]['messages'],
     system,
     ...(supportsTemp ? { temperature: temp } : {}),

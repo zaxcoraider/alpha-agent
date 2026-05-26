@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { dgrid } from '@/lib/llm/client';
+import { dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 
 export async function POST(req: Request) {
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     type === 'narrative' ? 'Narrative Play'     : 'Alpha Idea';
 
   const result = streamText({
-    model:       dgrid(MODELS.reasoner),
+    model:       dgridNoTemp(MODELS.reasoner),
     maxTokens:   2000,
     abortSignal: AbortSignal.timeout(90_000),
     system: `You are a senior crypto strategist and developer. Write detailed, actionable briefs that combine market intelligence with technical and business depth. Be concrete — no generic advice.`,

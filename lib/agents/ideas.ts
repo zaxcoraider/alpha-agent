@@ -1,6 +1,6 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 
 // ── Output schemas ────────────────────────────────────────────────────────────
@@ -43,7 +43,7 @@ export type IdeasBatch = z.infer<typeof IdeasBatchSchema>;
 
 export async function runIdeasSynthesis(contextSummary: string): Promise<IdeasBatch> {
   const { object } = await generateObject({
-    model:       dgrid(MODELS.reasoner),     // Claude Opus 4.7 — synthesis needs best model
+    model:       dgridNoTemp(MODELS.reasoner), // Claude Opus 4.7 — synthesis needs best model
     schema:      IdeasBatchSchema,
     abortSignal: AbortSignal.timeout(60_000),
     prompt: `You are the Alpha Synthesizer — a senior crypto strategist who reads signals from multiple intelligence feeds and distills them into high-conviction ideas.
