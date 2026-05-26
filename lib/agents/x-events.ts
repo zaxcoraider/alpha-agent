@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -36,13 +36,18 @@ export type XEvent = z.infer<typeof XEventSchema>;
 
 // ── Score + enrich each event ─────────────────────────────────────────────────
 
-async function scoreEvent(raw: RawXEvent): Promise<XEvent | null> {
+async function scoreEvent(raw: RawXEvent, grokContext: string): Promise<XEvent | null> {
   try {
     const { object } = await generateObject({
       model:       dgrid(MODELS.balanced),
       schema:      XEventSchema,
+      mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
       prompt: `Score and enrich this crypto X event for a serious crypto trader.
+
+LIVE GROK CONTEXT (X search right now — use this to verify/enrich the event):
+${grokContext || 'No additional live context.'}
+
 
 Event type: ${raw.type}
 Title: ${raw.title}
@@ -96,11 +101,31 @@ export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: num
     if (!seen.has(key)) { seen.add(key); unique.push(e); }
   }
 
-  // Score in batches of 4 (balanced model is fast)
+  // Single Grok call — live CT verification before scoring
+  let grokContext = '';
+  if (unique.length > 0) {
+    const titles = unique.slice(0, 15).map((e) => `- ${e.type}: ${e.title}`).join('\n');
+    try {
+      const { text } = await generateText({
+        model:       dgrid(MODELS.grok),
+        abortSignal: AbortSignal.timeout(40_000),
+        prompt: `Search X (Twitter) right now to verify and enrich these crypto events. For each, confirm if it's real/trending and add any missing details:
+
+${titles}
+
+For each event: is it confirmed on X? Current engagement? Any updates or corrections? Any related KOL posts I should know about? Keep it brief.`,
+      });
+      grokContext = text;
+    } catch {
+      // proceed without live verification
+    }
+  }
+
+  // Score in batches of 4, with live Grok context
   const events: XEvent[] = [];
   for (let i = 0; i < unique.length; i += 4) {
     const batch   = unique.slice(i, i + 4);
-    const results = await Promise.allSettled(batch.map(scoreEvent));
+    const results = await Promise.allSettled(batch.map((e) => scoreEvent(e, grokContext)));
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value) events.push(r.value);
     }

@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -27,10 +27,10 @@ export const MemeTokenSchema = z.object({
   kolHandles:     z.array(z.string()),
 
   narrative:       z.string(),
-  narrativeScore:  z.number().int().min(0).max(25),  // how strong is the narrative?
-  kolScore:        z.number().int().min(0).max(25),  // KOL + CT momentum
-  safetyScore:     z.number().int().min(0).max(25),  // contract / holder safety
-  volumeScore:     z.number().int().min(0).max(25),  // volume / liquidity quality
+  narrativeScore:  z.number().int().min(0).max(25),
+  kolScore:        z.number().int().min(0).max(25),
+  safetyScore:     z.number().int().min(0).max(25),
+  volumeScore:     z.number().int().min(0).max(25),
 
   gemScore:     z.number().int().min(0).max(100),
   gemBreakdown: z.string().max(400),
@@ -43,11 +43,11 @@ export const MemeTokenSchema = z.object({
   watchAction:    z.enum(['buy_small', 'watch', 'avoid']),
   watchReason:    z.string().max(200),
 
-  entryMarketCap: z.string().optional(),   // "Best entry under $500K MC"
-  entryStrategy:  z.string().max(250),     // "Buy 0.5 SOL if mcap < $300K, sell 50% at 3x"
-  x2Target:       z.string().optional(),   // market cap at 2x
-  x5Target:       z.string().optional(),   // market cap at 5x
-  developerFlags: z.array(z.string()),     // on-chain red flags from dev wallet
+  entryMarketCap: z.string().optional(),
+  entryStrategy:  z.string().max(250),
+  x2Target:       z.string().optional(),
+  x5Target:       z.string().optional(),
+  developerFlags: z.array(z.string()),
 
   dexUrl:  z.string().optional(),
   source:  z.string(),
@@ -55,16 +55,16 @@ export const MemeTokenSchema = z.object({
 
 export type MemeToken = z.infer<typeof MemeTokenSchema>;
 
-// ── Analysis ──────────────────────────────────────────────────────────────────
+// ── Per-token analysis (Sonnet 4.6 + Grok live CT context) ───────────────────
 
-async function analyzeToken(raw: RawMemeToken): Promise<MemeToken | null> {
+async function analyzeToken(raw: RawMemeToken, grokContext: string): Promise<MemeToken | null> {
   try {
     const mcapStr = raw.marketCapUsd
       ? `$${(raw.marketCapUsd / 1_000).toFixed(0)}K`
       : 'unknown';
 
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),  // Sonnet 4.6 — fast + no temp issue
+      model:       dgrid(MODELS.balanced),
       schema:      MemeTokenSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
@@ -85,6 +85,9 @@ CT mentions: ${raw.ctMentions} total · ${raw.ctVelocity.toFixed(1)}/hr velocity
 KOL mentioned: ${raw.mentionedByKOL} — handles: ${raw.kolHandles.join(', ') || 'none'}
 Narrative: ${raw.narrative}
 Source: ${raw.source}
+
+LIVE CT CONTEXT (from Grok X search right now):
+${grokContext || 'No real-time CT data available.'}
 
 ── GEM SCORE (0–100, split into 4 sub-scores of 25 each) ──
 
@@ -115,49 +118,22 @@ volumeScore (0-25): Volume and liquidity quality
 gemScore = narrativeScore + kolScore + safetyScore + volumeScore
 
 ── RUG RISK ──
-Check each flag:
-- Top 10 wallets hold >60% of supply: +1 flag
-- Liquidity <$10K: +1 flag
-- Deployed <1h with >$500K mcap (suspicious instant pump): +1 flag
-- No contract verification: +1 flag
-- Single wallet holds >20%: +1 flag
-- Honeypot patterns (can't sell signals on CT): +1 flag
-- Dev wallet selling: +1 flag
-- Copy-paste contract from known rug: +1 flag
-
 0 flags → low | 1-2 → medium | 3-4 → high | 5+ → critical
+Flags: top 10 wallets >60%, liquidity <$10K, instant pump <1h, unverified contract, single wallet >20%, honeypot signals, dev wallet selling, copy-paste rug contract.
 
 ── CATEGORY ──
 new_gem: deployed <24h, mcap <$500K, growing signals
-trending: gaining momentum, mcap $500K-$10M, strong CT
+trending: momentum building, mcap $500K-$10M, strong CT
 fading: peaked, losing momentum
-pumped: already >10x, likely too late for safe entry
+pumped: already >10x, likely too late
 
 ── WATCH ACTION ──
-buy_small: Strong early signals, acceptable risk — small position worth considering
-watch: Interesting but needs more confirmation — monitor closely
-avoid: Rug flags too high or too late to enter safely
-
-── ENTRY MARKET CAP ──
-Ideal market cap range to enter for best risk/reward. E.g. "Best entry under $500K MC" or "Already too pumped above $5M MC"
+buy_small: Strong early signals, acceptable risk
+watch: Interesting but needs confirmation
+avoid: Too risky or too late
 
 ── ENTRY STRATEGY ──
-Concrete position-sizing advice: "Buy 0.5 SOL worth if mcap < $300K. Take 50% profit at 3x, hold rest for 10x or zero."
-Be specific about size (% of portfolio or native token amount), entry condition, and exit plan.
-
-── PRICE TARGETS ──
-x2Target: market cap at which this would be a 2x from current price (e.g. "$600K MC")
-x5Target: market cap for 5x (e.g. "$1.5M MC")
-If already pumped or likely to rug, set both to null.
-
-── DEVELOPER FLAGS ──
-developerFlags: list specific on-chain red flags:
-- "Dev wallet holds X% of supply"
-- "Liquidity not locked"
-- "Contract has mint function"
-- "Bundled launch detected (multiple wallets bought at block 0)"
-- "Token tax >5%"
-Empty array if no flags found.
+Concrete: "Buy 0.5 SOL if mcap < $300K. Take 50% at 3x, hold rest for 10x or zero."
 
 Be honest. Most meme coins fail — score low if signals are weak.`,
     });
@@ -192,16 +168,35 @@ export async function runMemesScan(): Promise<{ tokens: MemeToken[]; scanned: nu
     ...unique.filter((t) => t.source !== 'grok'),
   ].slice(0, 20);
 
+  // Single Grok call — live CT snapshot for all tokens before analysis
+  let grokContext = '';
+  if (ordered.length > 0) {
+    const tickerList = ordered.map((t) => `$${t.ticker} (${t.chain.toUpperCase()})`).join(', ');
+    try {
+      const { text } = await generateText({
+        model:       dgrid(MODELS.grok),
+        abortSignal: AbortSignal.timeout(40_000),
+        prompt: `Search X (Twitter) right now for these meme tokens and give me a live CT update for each: ${tickerList}.
+
+For each token, cover: is CT bullish or bearish, which KOLs are posting about it, any red flags (rug warnings, honeypot alerts, dev selling), any positive signals (whale buys, viral posts, partnership news). 1-3 sentences per token. If no mentions found, say so.`,
+      });
+      grokContext = text;
+    } catch {
+      // proceed without live enrichment
+    }
+  }
+
+  // Analyze in batches of 3, passing live Grok context to each
   const tokens: MemeToken[] = [];
   for (let i = 0; i < ordered.length; i += 3) {
     const batch   = ordered.slice(i, i + 3);
-    const results = await Promise.allSettled(batch.map(analyzeToken));
+    const results = await Promise.allSettled(batch.map((t) => analyzeToken(t, grokContext)));
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value) tokens.push(r.value);
     }
   }
 
-  // Filter pumped + sort by gem score
+  // Filter fading + sort by gem score
   const active = tokens.filter((t) => t.category !== 'fading');
   active.sort((a, b) => b.gemScore - a.gemScore);
 
