@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -33,41 +33,54 @@ export type RawMemeToken = z.infer<typeof GrokMemeSchema>['tokens'][0] & {
   source: 'grok' | 'dexscreener';
 };
 
-// ── Grok CT real-time meme scan ───────────────────────────────────────────────
+// ── 2-step pipeline: Grok fetches live CT → DeepSeek structures it ────────────
 
 export async function scanCTForMemes(): Promise<RawMemeToken[]> {
+  // Step 1: Grok searches X in real-time for emerging meme coin signals
+  let ctReport = '';
   try {
-    const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),  // deepseek-v3.2 — confirmed working
-      schema:      GrokMemeSchema,
-      mode:        'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `You have real-time access to X (Twitter). Scan Crypto Twitter RIGHT NOW for emerging meme coins with early alpha signals.
+    const { text } = await generateText({
+      model:       dgrid(MODELS.grok),
+      abortSignal: AbortSignal.timeout(40_000),
+      prompt: `Search X (Twitter) right now for emerging meme coins with early alpha signals. Focus on Solana, Ethereum, Base, and BNB Chain.
 
-Focus on these 4 chains: Solana (sol), Ethereum (eth), Base (base), BNB Chain (bnb)
-
-Search signals:
+Search for:
 - "$TICKER" + "just launched" OR "stealth launch" OR "fair launch"
 - "new meme" OR "new token" OR "100x gem" + contract address
 - "CA:" or "contract:" + Solana/EVM address in KOL tweets
 - "rug-proof" OR "liquidity locked" + new token
-- Trending hashtags around meme coins (#memecoin #solana #base #bnbchain)
+- Trending meme coin hashtags (#memecoin #solana #base #bnbchain)
 - Tokens mentioned by 3+ different accounts in the last 2 hours
-- KOL account posts about "gem" or "early" + ticker symbol
+- KOL posts about "gem" or "early" + ticker symbol
 
-For each token:
-- ctMentions: total unique X accounts mentioning it in the past 6 hours
-- ctVelocity: mentions per hour (estimate trend — is it accelerating?)
-- mentionedByKOL: true if any account with 10k+ followers mentioned it
-- kolHandles: up to 5 influential handles (without @)
-- narrative: the meme theme — "AI agent", "political figure", "animal", "celebrity", "chain mascot", "trending news", "defi meme", "culture ref"
-- marketCapUsd: current market cap if findable on-chain/DexScreener (0 if unknown)
-- priceChange1h: approximate 1-hour price change percent
-- topHolderPct: approximate % of supply in top 10 wallets (rug signal)
-- deployedHoursAgo: hours since contract was deployed (0-24 is very early)
-- dexUrl: DexScreener link if you can find it
+For each token, report: name, ticker, chain, contract address, current market cap, price changes (1h/24h), trading volume, liquidity, how many wallets hold it, top holder concentration %, hours since deployed, how many X accounts are talking about it, which KOLs mentioned it, DexScreener link, the meme narrative/theme.
 
-PRIORITY: Tokens under $1M market cap, deployed <24h ago, with growing CT mentions — that's the early gem signal. Avoid already-pumped tokens with >$50M mcap unless velocity is extreme.`,
+Priority: tokens under $1M mcap deployed <24h ago with growing CT velocity — that's the early gem signal.`,
+    });
+    ctReport = text;
+  } catch {
+    return [];
+  }
+
+  if (!ctReport.trim()) return [];
+
+  // Step 2: DeepSeek parses Grok's live meme scan into structured schema
+  try {
+    const { object } = await generateObject({
+      model:       dgrid(MODELS.classifier),
+      schema:      GrokMemeSchema,
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
+      prompt: `Parse the following real-time meme coin intelligence report (fetched from Grok's live X search) into structured token entries.
+
+LIVE CT REPORT:
+${ctReport}
+
+Rules:
+- Only extract tokens explicitly mentioned in the report — no hallucinations
+- narrative: "AI agent", "political figure", "animal", "celebrity", "chain mascot", "trending news", "defi meme", "culture ref"
+- ctVelocity: mentions per hour (estimate from report)
+- topHolderPct: rug signal — high % = risky`,
     });
 
     return object.tokens.map((t) => ({ ...t, source: 'grok' as const }));

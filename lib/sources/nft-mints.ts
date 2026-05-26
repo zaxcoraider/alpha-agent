@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -32,38 +32,56 @@ export type RawNFTProject = z.infer<typeof GrokNFTSchema>['projects'][0] & {
   source: 'grok' | 'reservoir' | 'magiceden';
 };
 
-// ── Grok CT early signal scan ─────────────────────────────────────────────────
+// ── 2-step pipeline: Grok fetches live CT → DeepSeek structures it ────────────
 
 export async function scanCTForMints(): Promise<RawNFTProject[]> {
+  // Step 1: Grok searches X in real-time for live NFT mint signals
+  let ctReport = '';
   try {
-    const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),  // deepseek-v3.2 — confirmed working
-      schema:      GrokNFTSchema,
-      mode:        'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `You have real-time access to X (Twitter). Search CT (Crypto Twitter) RIGHT NOW for NFT mints that are either live, about to launch, or just announced — especially early signals with few mentions.
+    const { text } = await generateText({
+      model:       dgrid(MODELS.grok),
+      abortSignal: AbortSignal.timeout(40_000),
+      prompt: `Search X (Twitter) right now for NFT mint opportunities — live, about to launch, or just announced. Focus on early signals with few mentions.
 
-Search signals:
-- "free mint" + any contract address or link
+Search for:
+- "free mint" + contract address or link
 - "mint is live" OR "minting now" OR "mint opens"
 - "allowlist" OR "whitelist" OR "WL spots" + NFT project name
 - "stealth launch" OR "stealth mint"
 - "cNFT" OR "compressed NFT" (Solana near-free mints)
 - New project announcements from NFT KOL accounts
 
-Chains to cover: Solana (sol), Ethereum (eth), Base (base), Arbitrum (arbitrum), Polygon (polygon), BNB Chain (bnb)
+Chains: Solana, Ethereum, Base, Arbitrum, Polygon, BNB Chain
 
-For each project found:
-- ctMentions: total number of unique accounts mentioning it on X right now
-- ctVelocity: estimate how many mentions per hour (growing fast = high velocity)
-- mentionedByKOL: true if any account with 10k+ followers mentioned it
-- kolHandles: list of influential handles mentioning it (without @)
-- whaleActivity: true if known whale wallets are minting (check on-chain if possible)
-- teamDoxxed: true if team identity is known
-- contractVerified: true if contract is verified on-chain
-- gasEstimate: approximate gas cost in native token
+For each project found, report: project name, chain, mint price, mint status (live/upcoming/sold out), mint link, how many X accounts are talking about it, which KOLs mentioned it, any on-chain whale activity, whether team is doxxed, gas estimate.
 
-PRIORITY: Find projects with fewer than 50 total mentions that are growing fast — that's the early alpha.`,
+Prioritize projects with fewer than 50 mentions that are growing fast — those are early alpha.`,
+    });
+    ctReport = text;
+  } catch {
+    return [];
+  }
+
+  if (!ctReport.trim()) return [];
+
+  // Step 2: DeepSeek parses Grok's live report into structured schema
+  try {
+    const { object } = await generateObject({
+      model:       dgrid(MODELS.classifier),
+      schema:      GrokNFTSchema,
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(60_000),
+      prompt: `Parse the following real-time NFT mint intelligence report (fetched from Grok's live X search) into structured projects.
+
+LIVE CT REPORT:
+${ctReport}
+
+Rules:
+- Only extract projects explicitly mentioned in the report — no hallucinations
+- ctMentions: unique X accounts mentioning the project
+- ctVelocity: approximate mentions per hour
+- contractVerified: true only if explicitly stated
+- gasEstimate: format as "~0.003 ETH" or "~5000 CU" (Solana compute units)`,
     });
 
     return object.projects.map((p) => ({ ...p, source: 'grok' as const }));
