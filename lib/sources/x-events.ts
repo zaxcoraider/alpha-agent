@@ -14,18 +14,18 @@ const GrokXEventSchema = z.object({
   events: z.array(z.object({
     type:           XEventType,
     title:          z.string(),
-    description:    z.string().max(300),
+    description:    z.string().transform(s => s.slice(0, 300)),
     kolHandle:      z.string().optional(),
-    followersCount: z.number().int().min(0).optional(),
+    followersCount: z.number().transform(n => Math.max(0, Math.round(n))).optional(),
     ticker:         z.string().optional(),
     chain:          z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb', 'any']).optional(),
     scheduledFor:   z.string().optional(),
     url:            z.string().optional(),
     urgency:        z.enum(['live', 'today', 'this_week', 'upcoming']),
-    engagementCount: z.number().int().min(0).optional(),
-    narrativeTags:  z.array(z.string()).max(4).optional(),
+    engagementCount: z.number().transform(n => Math.max(0, Math.round(n))).optional(),
+    narrativeTags:  z.array(z.string()).transform(a => a.slice(0, 4)).optional(),
     ctSentiment:    z.enum(['very_bullish', 'bullish', 'neutral', 'bearish', 'very_bearish']).optional(),
-  })).max(40),
+  })),
 });
 
 export type RawXEvent = z.infer<typeof GrokXEventSchema>['events'][0] & {

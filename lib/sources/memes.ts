@@ -11,22 +11,22 @@ const GrokMemeSchema = z.object({
     ticker:           z.string(),
     chain:            z.enum(['sol', 'eth', 'base', 'bnb']),
     contractAddress:  z.string().optional(),
-    marketCapUsd:     z.number().min(0).optional(),
-    priceUsd:         z.number().min(0).optional(),
-    priceChange1h:    z.number().optional(),     // percent, can be negative
+    marketCapUsd:     z.number().optional(),
+    priceUsd:         z.number().optional(),
+    priceChange1h:    z.number().optional(),
     priceChange24h:   z.number().optional(),
-    volumeUsd24h:     z.number().min(0).optional(),
-    liquidity:        z.number().min(0).optional(),
-    holderCount:      z.number().int().min(0).optional(),
-    topHolderPct:     z.number().min(0).max(100).optional(), // % held by top 10
-    deployedHoursAgo: z.number().min(0).optional(),
-    ctMentions:       z.number().int().min(0),
-    ctVelocity:       z.number().min(0),
+    volumeUsd24h:     z.number().optional(),
+    liquidity:        z.number().optional(),
+    holderCount:      z.number().transform(n => Math.max(0, Math.round(n))).optional(),
+    topHolderPct:     z.number().transform(n => Math.max(0, Math.min(100, n))).optional(),
+    deployedHoursAgo: z.number().optional(),
+    ctMentions:       z.number().transform(n => Math.max(0, Math.round(n))),
+    ctVelocity:       z.number().transform(n => Math.max(0, n)),
     mentionedByKOL:   z.boolean(),
     kolHandles:       z.array(z.string()),
-    narrative:        z.string(),               // "AI meme", "animal", "political", etc.
+    narrative:        z.string(),
     dexUrl:           z.string().optional(),
-  })).max(25),
+  })),
 });
 
 export type RawMemeToken = z.infer<typeof GrokMemeSchema>['tokens'][0] & {

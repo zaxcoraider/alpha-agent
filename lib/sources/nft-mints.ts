@@ -10,22 +10,22 @@ const GrokNFTSchema = z.object({
   projects: z.array(z.object({
     name:              z.string(),
     chain:             z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb']),
-    mintPrice:         z.number().min(0),           // 0 = free
-    mintPriceCurrency: z.string(),                  // ETH / SOL / MATIC etc.
-    supply:            z.number().int().optional(),
+    mintPrice:         z.number().transform(n => Math.max(0, n)),
+    mintPriceCurrency: z.string(),
+    supply:            z.number().transform(n => Math.round(n)).optional(),
     mintStatus:        z.enum(['not_started', 'live', 'ending_soon', 'sold_out']),
     mintLink:          z.string().optional(),
     contractAddress:   z.string().optional(),
     contractVerified:  z.boolean(),
     teamDoxxed:        z.boolean(),
-    ctMentions:        z.number().int().min(0),     // total CT mentions found
-    ctVelocity:        z.number().min(0),           // approx mentions/hour
+    ctMentions:        z.number().transform(n => Math.max(0, Math.round(n))),
+    ctVelocity:        z.number().transform(n => Math.max(0, n)),
     mentionedByKOL:    z.boolean(),
     kolHandles:        z.array(z.string()),
     whaleActivity:     z.boolean(),
     whaleWallets:      z.array(z.string()),
-    gasEstimate:       z.string().optional(),       // '~0.003 ETH' or '~5000 CU'
-  })).max(25),
+    gasEstimate:       z.string().optional(),
+  })),
 });
 
 export type RawNFTProject = z.infer<typeof GrokNFTSchema>['projects'][0] & {
