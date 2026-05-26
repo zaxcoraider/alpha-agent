@@ -11,40 +11,52 @@ import {
 
 // ── Output schema ─────────────────────────────────────────────────────────────
 
+const en = (v: unknown) => String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+
 export const NFTMintSchema = z.object({
   name:              z.string(),
-  chain:             z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb']),
+  chain:             z.preprocess(v => {
+    const m: Record<string, string> = {
+      sol: 'sol', solana: 'sol',
+      eth: 'eth', ethereum: 'eth',
+      base: 'base',
+      arbitrum: 'arbitrum', arb: 'arbitrum',
+      polygon: 'polygon', matic: 'polygon',
+      bnb: 'bnb', bsc: 'bnb',
+    };
+    return m[String(v ?? '').toLowerCase().trim()] ?? String(v ?? '').toLowerCase().trim();
+  }, z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb'])).catch('eth'),
   mintPrice:         z.number().transform(n => Math.max(0, n)),
   mintPriceCurrency: z.string(),
   supply:            z.number().transform(n => Math.round(n)).optional(),
-  mintStatus:        z.enum(['not_started', 'live', 'ending_soon', 'sold_out']),
+  mintStatus:        z.preprocess(en, z.enum(['not_started', 'live', 'ending_soon', 'sold_out'])).catch('not_started'),
   mintLink:          z.string().optional(),
   contractAddress:   z.string().optional(),
-  contractVerified:  z.boolean(),
-  teamDoxxed:        z.boolean(),
+  contractVerified:  z.boolean().catch(false),
+  teamDoxxed:        z.boolean().catch(false),
 
   ctMentions:     z.number().transform(n => Math.max(0, Math.round(n))),
   ctVelocity:     z.number().transform(n => Math.max(0, n)),
-  mentionedByKOL: z.boolean(),
-  kolHandles:     z.array(z.string()),
+  mentionedByKOL: z.boolean().catch(false),
+  kolHandles:     z.array(z.string()).catch([]),
 
   alphaScore:     z.number().transform(n => Math.max(0, Math.min(100, Math.round(n)))),
   alphaBreakdown: z.string().transform(s => s.slice(0, 400)),
 
-  rugRisk:  z.enum(['low', 'medium', 'high', 'critical']),
-  rugFlags: z.array(z.string()),
+  rugRisk:  z.preprocess(en, z.enum(['low', 'medium', 'high', 'critical'])).catch('medium'),
+  rugFlags: z.array(z.string()).catch([]),
 
   futurePotential:   z.number().transform(n => Math.max(1, Math.min(10, Math.round(n)))),
   floorPrediction7d: z.string().optional(),
   similarTo:         z.string().optional(),
 
-  isFree:          z.boolean(),
+  isFree:          z.boolean().catch(false),
   mintStrategy:    z.string().transform(s => s.slice(0, 300)),
   bluechipScore:   z.number().transform(n => Math.max(0, Math.min(100, Math.round(n)))),
   nextSteps:       z.string().transform(s => s.slice(0, 200)),
 
-  whaleActivity: z.boolean(),
-  whaleWallets:  z.array(z.string()),
+  whaleActivity: z.boolean().catch(false),
+  whaleWallets:  z.array(z.string()).catch([]),
   gasEstimate:   z.string().optional(),
   source:        z.string(),
 });

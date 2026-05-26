@@ -5,11 +5,19 @@ import { MODELS } from '@/lib/llm/models';
 
 // ── Raw meme token schema from Grok ──────────────────────────────────────────
 
+const en = (v: unknown) => String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+
 const GrokMemeSchema = z.object({
   tokens: z.array(z.object({
     name:             z.string(),
     ticker:           z.string(),
-    chain:            z.enum(['sol', 'eth', 'base', 'bnb']),
+    chain:            z.preprocess(v => {
+      const m: Record<string, string> = {
+        sol: 'sol', solana: 'sol', eth: 'eth', ethereum: 'eth',
+        base: 'base', bnb: 'bnb', bsc: 'bnb',
+      };
+      return m[String(v ?? '').toLowerCase().trim()] ?? 'eth';
+    }, z.enum(['sol', 'eth', 'base', 'bnb'])).catch('eth'),
     contractAddress:  z.string().optional(),
     marketCapUsd:     z.number().optional(),
     priceUsd:         z.number().optional(),
@@ -22,8 +30,8 @@ const GrokMemeSchema = z.object({
     deployedHoursAgo: z.number().optional(),
     ctMentions:       z.number().transform(n => Math.max(0, Math.round(n))),
     ctVelocity:       z.number().transform(n => Math.max(0, n)),
-    mentionedByKOL:   z.boolean(),
-    kolHandles:       z.array(z.string()),
+    mentionedByKOL:   z.boolean().catch(false),
+    kolHandles:       z.array(z.string()).catch([]),
     narrative:        z.string(),
     dexUrl:           z.string().optional(),
   })),

@@ -6,10 +6,21 @@ import { scanCTForMemes, fetchDexScreenerTrending, type RawMemeToken } from '@/l
 
 // ── Output schema ─────────────────────────────────────────────────────────────
 
+// Normalise enum strings: lowercase + spaces→underscores (handles 'New Gem' → 'new_gem')
+const en = (v: unknown) => String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+
 export const MemeTokenSchema = z.object({
   name:             z.string(),
   ticker:           z.string(),
-  chain:            z.enum(['sol', 'eth', 'base', 'bnb']),
+  chain:            z.preprocess(v => {
+    const m: Record<string, string> = {
+      sol: 'sol', solana: 'sol',
+      eth: 'eth', ethereum: 'eth',
+      base: 'base',
+      bnb: 'bnb', bsc: 'bnb', 'bnb_chain': 'bnb', 'bnb chain': 'bnb',
+    };
+    return m[String(v ?? '').toLowerCase().trim()] ?? String(v ?? '').toLowerCase().trim();
+  }, z.enum(['sol', 'eth', 'base', 'bnb'])).catch('eth'),
   contractAddress:  z.string().optional(),
   marketCapUsd:     z.number().optional(),
   priceUsd:         z.number().optional(),
@@ -23,8 +34,8 @@ export const MemeTokenSchema = z.object({
 
   ctMentions:     z.number().transform(n => Math.max(0, Math.round(n))),
   ctVelocity:     z.number().transform(n => Math.max(0, n)),
-  mentionedByKOL: z.boolean(),
-  kolHandles:     z.array(z.string()),
+  mentionedByKOL: z.boolean().catch(false),
+  kolHandles:     z.array(z.string()).catch([]),
 
   narrative:       z.string(),
   narrativeScore:  z.number().transform(n => Math.max(0, Math.min(25, Math.round(n)))),
@@ -35,19 +46,19 @@ export const MemeTokenSchema = z.object({
   gemScore:     z.number().transform(n => Math.max(0, Math.min(100, Math.round(n)))),
   gemBreakdown: z.string().transform(s => s.slice(0, 400)),
 
-  rugRisk:  z.enum(['low', 'medium', 'high', 'critical']),
-  rugFlags: z.array(z.string()),
+  rugRisk:  z.preprocess(en, z.enum(['low', 'medium', 'high', 'critical'])).catch('medium'),
+  rugFlags: z.array(z.string()).catch([]),
 
-  category:       z.enum(['new_gem', 'trending', 'fading', 'pumped']),
+  category:       z.preprocess(en, z.enum(['new_gem', 'trending', 'fading', 'pumped'])).catch('trending'),
   priceTarget:    z.string().optional(),
-  watchAction:    z.enum(['buy_small', 'watch', 'avoid']),
+  watchAction:    z.preprocess(en, z.enum(['buy_small', 'watch', 'avoid'])).catch('watch'),
   watchReason:    z.string().transform(s => s.slice(0, 200)),
 
   entryMarketCap: z.string().optional(),
   entryStrategy:  z.string().transform(s => s.slice(0, 250)),
   x2Target:       z.string().optional(),
   x5Target:       z.string().optional(),
-  developerFlags: z.array(z.string()),
+  developerFlags: z.array(z.string()).catch([]),
 
   dexUrl:  z.string().optional(),
   source:  z.string(),

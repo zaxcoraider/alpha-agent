@@ -6,27 +6,36 @@ import { scanXEvents, type RawXEvent } from '@/lib/sources/x-events';
 
 // ── Output schema ─────────────────────────────────────────────────────────────
 
+const en = (v: unknown) => String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+
 export const XEventSchema = z.object({
-  type:           z.enum(['space', 'viral_thread', 'kol_alert', 'airdrop', 'token_unlock', 'listing', 'narrative_shift', 'whale_move']),
+  type:           z.preprocess(en, z.enum(['space', 'viral_thread', 'kol_alert', 'airdrop', 'token_unlock', 'listing', 'narrative_shift', 'whale_move'])).catch('kol_alert'),
   title:          z.string(),
-  description:    z.string().max(300),
+  description:    z.string().transform(s => s.slice(0, 300)),
   kolHandle:      z.string().optional(),
   followersCount: z.number().transform(n => Math.max(0, Math.round(n))).optional(),
   ticker:         z.string().optional(),
-  chain:          z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb', 'any']).optional(),
+  chain:          z.preprocess(v => {
+    const m: Record<string, string> = {
+      sol: 'sol', solana: 'sol', eth: 'eth', ethereum: 'eth',
+      base: 'base', arbitrum: 'arbitrum', arb: 'arbitrum',
+      polygon: 'polygon', matic: 'polygon', bnb: 'bnb', bsc: 'bnb', any: 'any',
+    };
+    return m[String(v ?? '').toLowerCase().trim()] ?? 'any';
+  }, z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb', 'any'])).catch('any').optional(),
   scheduledFor:   z.string().optional(),
   url:            z.string().optional(),
-  urgency:        z.enum(['live', 'today', 'this_week', 'upcoming']),
+  urgency:        z.preprocess(en, z.enum(['live', 'today', 'this_week', 'upcoming'])).catch('upcoming'),
   engagementCount: z.number().transform(n => Math.max(0, Math.round(n))).optional(),
-  narrativeTags:   z.array(z.string()).max(4).optional(),
-  ctSentiment:     z.enum(['very_bullish', 'bullish', 'neutral', 'bearish', 'very_bearish']).optional(),
+  narrativeTags:   z.array(z.string()).catch([]).optional(),
+  ctSentiment:     z.preprocess(en, z.enum(['very_bullish', 'bullish', 'neutral', 'bearish', 'very_bearish'])).catch('neutral').optional(),
 
   relevanceScore:  z.number().transform(n => Math.max(1, Math.min(10, Math.round(n)))),
   relevanceReason: z.string().transform(s => s.slice(0, 200)),
-  actionable:      z.boolean(),
+  actionable:      z.boolean().catch(false),
   actionSummary:   z.string().transform(s => s.slice(0, 200)),
 
-  priceImpact:  z.enum(['bullish', 'bearish', 'neutral', 'unknown']),
+  priceImpact:  z.preprocess(en, z.enum(['bullish', 'bearish', 'neutral', 'unknown'])).catch('unknown'),
   impactReason: z.string().transform(s => s.slice(0, 150)),
 
   source: z.string(),
