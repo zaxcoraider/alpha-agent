@@ -1,6 +1,6 @@
-import { generateText, generateObject } from 'ai';
+import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid, dgridNoTemp } from '@/lib/llm/client';
+import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { scanCTForMemes, fetchDexScreenerTrending, type RawMemeToken } from '@/lib/sources/memes';
 
@@ -154,6 +154,7 @@ export async function runMemesScan(): Promise<{ tokens: MemeToken[]; scanned: nu
   ]);
 
   const all = [...grokTokens, ...dexTokens];
+  console.log(`[memes] sources returned: grok=${grokTokens.length} dex=${dexTokens.length}`);
 
   // Deduplicate by ticker+chain
   const seen = new Set<string>();
@@ -163,39 +164,22 @@ export async function runMemesScan(): Promise<{ tokens: MemeToken[]; scanned: nu
     if (!seen.has(key)) { seen.add(key); unique.push(t); }
   }
 
-  // Grok-first, cap at 20
+  // Grok-first, cap at 5 to stay within Vercel timeout + save credits
   const ordered = [
     ...unique.filter((t) => t.source === 'grok'),
     ...unique.filter((t) => t.source !== 'grok'),
-  ].slice(0, 20);
+  ].slice(0, 5);
 
-  // Single Grok call — live CT snapshot for all tokens before analysis
-  let grokContext = '';
-  if (ordered.length > 0) {
-    const tickerList = ordered.map((t) => `$${t.ticker} (${t.chain.toUpperCase()})`).join(', ');
-    try {
-      const { text } = await generateText({
-        model:       dgridNoTemp(MODELS.grok),
-        abortSignal: AbortSignal.timeout(40_000),
-        prompt: `Search X (Twitter) right now for these meme tokens and give me a live CT update for each: ${tickerList}.
+  console.log(`[memes] analyzing ${ordered.length} tokens`);
 
-For each token, cover: is CT bullish or bearish, which KOLs are posting about it, any red flags (rug warnings, honeypot alerts, dev selling), any positive signals (whale buys, viral posts, partnership news). 1-3 sentences per token. If no mentions found, say so.`,
-      });
-      grokContext = text;
-    } catch (err) {
-      console.error('[memes] Grok enrichment failed:', err);
-    }
-  }
-
-  // Analyze in batches of 3, passing live Grok context to each
+  // Analyze all in parallel — no second Grok enrichment call (saves credits)
+  const results = await Promise.allSettled(ordered.map((t) => analyzeToken(t, '')));
   const tokens: MemeToken[] = [];
-  for (let i = 0; i < ordered.length; i += 3) {
-    const batch   = ordered.slice(i, i + 3);
-    const results = await Promise.allSettled(batch.map((t) => analyzeToken(t, grokContext)));
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) tokens.push(r.value);
-    }
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) tokens.push(r.value);
   }
+
+  console.log(`[memes] analysis done: ${tokens.length} tokens produced`);
 
   // Filter fading + sort by gem score
   const active = tokens.filter((t) => t.category !== 'fading');

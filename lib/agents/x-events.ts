@@ -1,6 +1,6 @@
-import { generateText, generateObject } from 'ai';
+import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid, dgridNoTemp } from '@/lib/llm/client';
+import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { scanXEvents, type RawXEvent } from '@/lib/sources/x-events';
 
@@ -93,6 +93,7 @@ Be precise and realistic. Most events are 4-6 relevance.`,
 
 export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: number }> {
   const rawEvents = await scanXEvents();
+  console.log(`[x-events] source returned: ${rawEvents.length} events`);
 
   // Deduplicate by title prefix
   const seen = new Set<string>();
@@ -102,35 +103,17 @@ export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: num
     if (!seen.has(key)) { seen.add(key); unique.push(e); }
   }
 
-  // Single Grok call — live CT verification before scoring
-  let grokContext = '';
-  if (unique.length > 0) {
-    const titles = unique.slice(0, 15).map((e) => `- ${e.type}: ${e.title}`).join('\n');
-    try {
-      const { text } = await generateText({
-        model:       dgridNoTemp(MODELS.grok),
-        abortSignal: AbortSignal.timeout(40_000),
-        prompt: `Search X (Twitter) right now to verify and enrich these crypto events. For each, confirm if it's real/trending and add any missing details:
+  // Cap at 8, analyze all in parallel — no second Grok call (saves credits)
+  const toScore = unique.slice(0, 8);
+  console.log(`[x-events] scoring ${toScore.length} events`);
 
-${titles}
-
-For each event: is it confirmed on X? Current engagement? Any updates or corrections? Any related KOL posts I should know about? Keep it brief.`,
-      });
-      grokContext = text;
-    } catch (err) {
-      console.error('[x-events] Grok enrichment failed:', err);
-    }
-  }
-
-  // Score in batches of 4, with live Grok context
+  const results = await Promise.allSettled(toScore.map((e) => scoreEvent(e, '')));
   const events: XEvent[] = [];
-  for (let i = 0; i < unique.length; i += 4) {
-    const batch   = unique.slice(i, i + 4);
-    const results = await Promise.allSettled(batch.map((e) => scoreEvent(e, grokContext)));
-    for (const r of results) {
-      if (r.status === 'fulfilled' && r.value) events.push(r.value);
-    }
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) events.push(r.value);
   }
+
+  console.log(`[x-events] scoring done: ${events.length} events produced`);
 
   // Sort: urgency first, then relevance
   const urgencyOrder: Record<XEvent['urgency'], number> = {
