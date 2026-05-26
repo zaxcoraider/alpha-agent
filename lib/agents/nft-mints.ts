@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -65,76 +65,67 @@ export type NFTMint = z.infer<typeof NFTMintSchema>;
 
 // ── Per-project analysis (Sonnet 4.6 + Grok live CT context) ─────────────────
 
-async function analyzeProject(raw: RawNFTProject, grokContext: string): Promise<NFTMint | null> {
+async function analyzeProject(raw: RawNFTProject, _grokContext: string): Promise<NFTMint | null> {
   try {
-    const { object } = await generateObject({
+    const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
-      schema:      NFTMintSchema,
-      mode:        'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `Analyze this NFT project for alpha score, rug risk, and future potential.
+      abortSignal: AbortSignal.timeout(45_000),
+      prompt: `Analyze this NFT project. Reply with ONLY a JSON object — no markdown, no explanation.
 
-Project data:
-Name: ${raw.name}
-Chain: ${raw.chain}
-Mint price: ${raw.mintPrice} ${raw.mintPriceCurrency} (0 = free)
-Supply: ${raw.supply ?? 'unknown'}
-Status: ${raw.mintStatus}
-Contract: ${raw.contractAddress ?? 'not provided'} | Verified: ${raw.contractVerified}
-Team doxxed: ${raw.teamDoxxed}
-CT mentions: ${raw.ctMentions} total | Velocity: ${raw.ctVelocity}/hr
-KOL mentioned: ${raw.mentionedByKOL} — handles: ${raw.kolHandles.join(', ') || 'none'}
-Whale activity: ${raw.whaleActivity} — wallets: ${raw.whaleWallets.join(', ') || 'none'}
-Mint link: ${raw.mintLink ?? 'not provided'}
-Source: ${raw.source}
+Project: ${raw.name} on ${raw.chain}
+Price: ${raw.mintPrice} ${raw.mintPriceCurrency} | Supply: ${raw.supply ?? 'unknown'}
+Status: ${raw.mintStatus} | Contract: ${raw.contractAddress ?? 'none'} (verified: ${raw.contractVerified})
+Team doxxed: ${raw.teamDoxxed} | CT: ${raw.ctMentions} mentions @ ${raw.ctVelocity}/hr
+KOL: ${raw.mentionedByKOL} | Whales: ${raw.whaleActivity}
+Link: ${raw.mintLink ?? 'none'} | Source: ${raw.source}
 
-LIVE CT CONTEXT (from Grok X search right now):
-${grokContext || 'No real-time CT data available.'}
-
-── ALPHA SCORE (0–100) ──
-Start from 0, add:
-+20 if fewer than 20 total CT mentions (true early alpha)
-+15 if CT velocity > 5x/hr growth
-+15 if mentioned by verified NFT KOL (10k+ followers)
-+15 if known whale wallet is already minting
-+10 if free mint (price = 0)
-+10 if contract deployed < 48h (new project)
-+10 if mint not started yet (earliest signal)
-+5  if team has successful past project
-
-── RUG RISK DETECTION ──
-0 flags → low | 1-2 → medium | 3-4 → high | 5+ → critical
-Flags: anonymous team, unverified contract, high price + no audit, dev wallet >20%, no liquidity lock, copy-paste concept, fake followers, impersonating known project, X account <30 days old.
-
-── FUTURE POTENTIAL (1–10) ──
-Consider: unique concept, chain timing, team, community signals, comparable projects.
-
-── FLOOR PREDICTION 7d ──
-Best estimate of floor price 7 days post-mint. Format: "X.XX ETH" or "X SOL".
-
-── SIMILAR TO ──
-Most similar successful early launch pattern (e.g. "early Azuki signals"). Null if not genuinely similar.
-
-── IS FREE ──
-isFree: true if mintPrice === 0. Free mints are highest priority.
-
-── MINT STRATEGY ──
-Concrete advice for this project:
-- If free: "Mint max wallet limit immediately. List 50% at 2x floor, hold rest."
-- If paid: "Only mint if KOL-backed + team doxxed. Budget max 0.05 ETH. Flip at 3x."
-Include timing advice (mint window, expected floor timeline).
-
-── BLUE CHIP SCORE (0-100) ──
-Probability of becoming a recognized blue chip (BAYC, Azuki, Pudgy Penguins level).
-Most projects score 0-10. Only >50 for exceptional signals.
-
-── NEXT STEPS ──
-One concrete sentence of what to do RIGHT NOW.
-
-Be precise and honest. If signals are weak, score low.`,
+Return this exact JSON (ONLY these allowed values):
+{
+  "name": "${raw.name.replace(/"/g, "'")}",
+  "chain": "${raw.chain}",
+  "mintPrice": ${raw.mintPrice},
+  "mintPriceCurrency": "${raw.mintPriceCurrency}",
+  "supply": ${raw.supply ?? null},
+  "mintStatus": "<one of: not_started, live, ending_soon, sold_out>",
+  "mintLink": ${raw.mintLink ? `"${raw.mintLink}"` : 'null'},
+  "contractAddress": ${raw.contractAddress ? `"${raw.contractAddress}"` : 'null'},
+  "contractVerified": ${raw.contractVerified},
+  "teamDoxxed": ${raw.teamDoxxed},
+  "ctMentions": ${raw.ctMentions},
+  "ctVelocity": ${raw.ctVelocity},
+  "mentionedByKOL": ${raw.mentionedByKOL},
+  "kolHandles": ${JSON.stringify(raw.kolHandles)},
+  "alphaScore": <0-100>,
+  "alphaBreakdown": "<why this score, max 300 chars>",
+  "rugRisk": "<one of: low, medium, high, critical>",
+  "rugFlags": ["<flag>"],
+  "futurePotential": <1-10>,
+  "floorPrediction7d": "<e.g. 0.05 ETH or null>",
+  "similarTo": "<e.g. early Azuki or null>",
+  "isFree": ${raw.mintPrice === 0},
+  "mintStrategy": "<concrete advice max 250 chars>",
+  "bluechipScore": <0-100>,
+  "nextSteps": "<one sentence what to do now, max 150 chars>",
+  "whaleActivity": ${raw.whaleActivity},
+  "whaleWallets": ${JSON.stringify(raw.whaleWallets)},
+  "gasEstimate": ${raw.gasEstimate ? `"${raw.gasEstimate}"` : 'null'},
+  "source": "${raw.source}"
+}`,
     });
 
-    return { ...object, source: raw.source };
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) { console.error('[nft-mints] no JSON for', raw.name); return null; }
+
+    let obj: Record<string, unknown>;
+    try { obj = JSON.parse(match[0]); }
+    catch (e) { console.error('[nft-mints] JSON.parse failed', e); return null; }
+
+    const parsed = NFTMintSchema.safeParse(obj);
+    if (!parsed.success) {
+      console.error('[nft-mints] schema failed for', raw.name, JSON.stringify(parsed.error.issues[0]));
+      return null;
+    }
+    return parsed.data;
   } catch (err) {
     console.error('[nft-mints] analyzeProject failed:', err);
     return null;

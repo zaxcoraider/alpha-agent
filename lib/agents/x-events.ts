@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -45,53 +45,57 @@ export type XEvent = z.infer<typeof XEventSchema>;
 
 // ── Score + enrich each event ─────────────────────────────────────────────────
 
-async function scoreEvent(raw: RawXEvent, grokContext: string): Promise<XEvent | null> {
+async function scoreEvent(raw: RawXEvent, _grokContext: string): Promise<XEvent | null> {
   try {
-    const { object } = await generateObject({
+    const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
-      schema:      XEventSchema,
-      mode:        'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `Score and enrich this crypto X event for a serious crypto trader.
+      abortSignal: AbortSignal.timeout(45_000),
+      prompt: `Score this crypto X event. Reply with ONLY a JSON object — no markdown, no explanation.
 
-LIVE GROK CONTEXT (X search right now — use this to verify/enrich the event):
-${grokContext || 'No additional live context.'}
-
-
-Event type: ${raw.type}
-Title: ${raw.title}
+Type: ${raw.type} | Title: ${raw.title}
+KOL: ${raw.kolHandle ?? 'n/a'} (${raw.followersCount ?? '?'} followers)
+Token: ${raw.ticker ?? 'n/a'} on ${raw.chain ?? 'any'}
+Urgency: ${raw.urgency} | Engagement: ${raw.engagementCount ?? 'unknown'}
 Description: ${raw.description}
-KOL handle: ${raw.kolHandle ?? 'n/a'} (${raw.followersCount ? raw.followersCount.toLocaleString() + ' followers' : 'unknown followers'})
-Token: ${raw.ticker ?? 'n/a'} on ${raw.chain ?? 'unknown chain'}
-Urgency: ${raw.urgency}
-Scheduled: ${raw.scheduledFor ?? 'not specified'}
-Engagement: ${raw.engagementCount ? raw.engagementCount.toLocaleString() + ' likes/RTs' : 'unknown'}
-URL: ${raw.url ?? 'none'}
 
-── RELEVANCE SCORE (1-10) ──
-10: Critical alpha — immediate price catalyst or rare opportunity (Binance listing, top-5 KOL entry, live high-alpha Space)
-8-9: High value — significant KOL call, major unlock, high-engagement thread with real data
-6-7: Useful — interesting thread, mid-tier KOL, upcoming listing, airdrop with decent protocol
-4-5: Moderate — airdrop from unknown protocol, small KOL, general discussion thread
-1-3: Low signal — vague content, tiny accounts, no specific alpha
-
-── ACTIONABLE ──
-true if there is something concrete the user can DO right now (claim airdrop, watch Space, add to watchlist, set alert, take a position)
-false if it's purely informational with no near-term action
-
-── ACTION SUMMARY ──
-One concrete sentence: "Claim at [url] before [date]", "Watch the Space live", "Set a sell alert for $TOKEN — unlock in 3 days", etc.
-
-── PRICE IMPACT ──
-bullish: positive catalyst (listing, KOL buy, positive unlock news, airdrop for holders)
-bearish: negative catalyst (large unlock, KOL selling, negative thread)
-neutral: no direct price impact
-unknown: unclear
-
-Be precise and realistic. Most events are 4-6 relevance.`,
+Return this exact JSON (ONLY these allowed values):
+{
+  "type": "<one of: space, viral_thread, kol_alert, airdrop, token_unlock, listing, narrative_shift, whale_move>",
+  "title": "${raw.title.replace(/"/g, "'")}",
+  "description": "<summary max 250 chars>",
+  "kolHandle": ${raw.kolHandle ? `"${raw.kolHandle}"` : 'null'},
+  "followersCount": ${raw.followersCount ?? null},
+  "ticker": ${raw.ticker ? `"${raw.ticker}"` : 'null'},
+  "chain": ${raw.chain ? `"${raw.chain}"` : 'null'},
+  "scheduledFor": ${raw.scheduledFor ? `"${raw.scheduledFor}"` : 'null'},
+  "url": ${raw.url ? `"${raw.url}"` : 'null'},
+  "urgency": "<one of: live, today, this_week, upcoming>",
+  "engagementCount": ${raw.engagementCount ?? null},
+  "narrativeTags": ["<tag1>"],
+  "ctSentiment": "<one of: very_bullish, bullish, neutral, bearish, very_bearish>",
+  "relevanceScore": <1-10>,
+  "relevanceReason": "<why this score, max 150 chars>",
+  "actionable": <true or false>,
+  "actionSummary": "<one concrete sentence what to do, max 150 chars>",
+  "priceImpact": "<one of: bullish, bearish, neutral, unknown>",
+  "impactReason": "<why, max 100 chars>",
+  "source": "${raw.source}"
+}`,
     });
 
-    return { ...object, source: raw.source };
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) { console.error('[x-events] no JSON for', raw.title); return null; }
+
+    let obj: Record<string, unknown>;
+    try { obj = JSON.parse(match[0]); }
+    catch (e) { console.error('[x-events] JSON.parse failed', e); return null; }
+
+    const parsed = XEventSchema.safeParse(obj);
+    if (!parsed.success) {
+      console.error('[x-events] schema failed for', raw.title, JSON.stringify(parsed.error.issues[0]));
+      return null;
+    }
+    return parsed.data;
   } catch (err) {
     console.error('[x-events] scoreEvent failed:', err);
     return null;

@@ -1,4 +1,4 @@
-import { generateObject } from 'ai';
+import { generateText } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
@@ -68,88 +68,79 @@ export type MemeToken = z.infer<typeof MemeTokenSchema>;
 
 // ── Per-token analysis (Sonnet 4.6 + Grok live CT context) ───────────────────
 
-async function analyzeToken(raw: RawMemeToken, grokContext: string): Promise<MemeToken | null> {
+async function analyzeToken(raw: RawMemeToken, _grokContext: string): Promise<MemeToken | null> {
   try {
-    const mcapStr = raw.marketCapUsd
-      ? `$${(raw.marketCapUsd / 1_000).toFixed(0)}K`
-      : 'unknown';
+    const mcap = raw.marketCapUsd ? `$${(raw.marketCapUsd / 1_000).toFixed(0)}K` : 'unknown';
 
-    const { object } = await generateObject({
+    const { text } = await generateText({
       model:       dgrid(MODELS.classifier),
-      schema:      MemeTokenSchema,
-      mode:        'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `Analyze this meme coin for gem potential and rug risk.
+      abortSignal: AbortSignal.timeout(45_000),
+      prompt: `Analyze this meme coin. Reply with ONLY a JSON object — no markdown, no explanation.
 
-Token data:
-Name: ${raw.name} ($${raw.ticker})
-Chain: ${raw.chain.toUpperCase()}
-Contract: ${raw.contractAddress ?? 'not provided'}
-Market cap: ${mcapStr}
-Price change 1h: ${raw.priceChange1h !== undefined ? `${raw.priceChange1h > 0 ? '+' : ''}${raw.priceChange1h.toFixed(1)}%` : 'unknown'}
-Price change 24h: ${raw.priceChange24h !== undefined ? `${raw.priceChange24h > 0 ? '+' : ''}${raw.priceChange24h.toFixed(1)}%` : 'unknown'}
-Volume 24h: ${raw.volumeUsd24h ? `$${(raw.volumeUsd24h / 1_000).toFixed(0)}K` : 'unknown'}
-Liquidity: ${raw.liquidity ? `$${(raw.liquidity / 1_000).toFixed(0)}K` : 'unknown'}
-Top 10 holder %: ${raw.topHolderPct !== undefined ? `${raw.topHolderPct.toFixed(1)}%` : 'unknown'}
-Contract age: ${raw.deployedHoursAgo !== undefined ? `${raw.deployedHoursAgo.toFixed(1)}h ago` : 'unknown'}
-CT mentions: ${raw.ctMentions} total · ${raw.ctVelocity.toFixed(1)}/hr velocity
-KOL mentioned: ${raw.mentionedByKOL} — handles: ${raw.kolHandles.join(', ') || 'none'}
+Token: ${raw.name} ($${raw.ticker}) on ${raw.chain}
+Contract: ${raw.contractAddress ?? 'unknown'} | Mcap: ${mcap}
+1h: ${raw.priceChange1h ?? 'n/a'}% | 24h: ${raw.priceChange24h ?? 'n/a'}%
+Vol 24h: ${raw.volumeUsd24h ? `$${(raw.volumeUsd24h/1000).toFixed(0)}K` : 'n/a'} | Liq: ${raw.liquidity ? `$${(raw.liquidity/1000).toFixed(0)}K` : 'n/a'}
+Top10 holders: ${raw.topHolderPct ?? 'n/a'}% | Age: ${raw.deployedHoursAgo?.toFixed(1) ?? 'n/a'}h
+CT: ${raw.ctMentions} mentions @ ${raw.ctVelocity.toFixed(1)}/hr | KOL: ${raw.mentionedByKOL}
 Narrative: ${raw.narrative}
-Source: ${raw.source}
 
-LIVE CT CONTEXT (from Grok X search right now):
-${grokContext || 'No real-time CT data available.'}
-
-── GEM SCORE (0–100, split into 4 sub-scores of 25 each) ──
-
-narrativeScore (0-25): How strong and timely is the meme narrative?
-+25 narrative is currently viral/trending (AI, political, major news event)
-+18 narrative is hot but not breaking (animal meta, culture ref)
-+10 narrative is niche but genuine
-+5  generic / no clear narrative
-
-kolScore (0-25): KOL and CT momentum signals
-+25 multiple 100k+ KOL accounts posting, velocity >20/hr
-+18 at least one major KOL + velocity >5/hr
-+12 growing CT mentions, no major KOL yet
-+5  low mentions, low velocity
-
-safetyScore (0-25): Contract and holder safety
-+25 deployed <6h, top 10 holders <40%, liquidity present
-+18 deployed <24h, top 10 <50%
-+10 deployed <48h, some concentration risk
-+0  red flags: top holders >70%, no liquidity, anonymous dev with large wallet
-
-volumeScore (0-25): Volume and liquidity quality
-+25 volume:mcap ratio >0.5, liquidity >$100K
-+18 volume:mcap >0.2, liquidity >$50K
-+10 some volume, liquidity building
-+5  very low volume or liquidity (<$10K)
-
-gemScore = narrativeScore + kolScore + safetyScore + volumeScore
-
-── RUG RISK ──
-0 flags → low | 1-2 → medium | 3-4 → high | 5+ → critical
-Flags: top 10 wallets >60%, liquidity <$10K, instant pump <1h, unverified contract, single wallet >20%, honeypot signals, dev wallet selling, copy-paste rug contract.
-
-── CATEGORY ──
-new_gem: deployed <24h, mcap <$500K, growing signals
-trending: momentum building, mcap $500K-$10M, strong CT
-fading: peaked, losing momentum
-pumped: already >10x, likely too late
-
-── WATCH ACTION ──
-buy_small: Strong early signals, acceptable risk
-watch: Interesting but needs confirmation
-avoid: Too risky or too late
-
-── ENTRY STRATEGY ──
-Concrete: "Buy 0.5 SOL if mcap < $300K. Take 50% at 3x, hold rest for 10x or zero."
-
-Be honest. Most meme coins fail — score low if signals are weak.`,
+Return this exact JSON (use ONLY the allowed values shown):
+{
+  "name": "${raw.name}",
+  "ticker": "${raw.ticker}",
+  "chain": "${raw.chain}",
+  "contractAddress": ${raw.contractAddress ? `"${raw.contractAddress}"` : 'null'},
+  "marketCapUsd": ${raw.marketCapUsd ?? null},
+  "priceUsd": ${raw.priceUsd ?? null},
+  "priceChange1h": ${raw.priceChange1h ?? null},
+  "priceChange24h": ${raw.priceChange24h ?? null},
+  "volumeUsd24h": ${raw.volumeUsd24h ?? null},
+  "liquidity": ${raw.liquidity ?? null},
+  "holderCount": ${raw.holderCount ?? null},
+  "topHolderPct": ${raw.topHolderPct ?? null},
+  "deployedHoursAgo": ${raw.deployedHoursAgo ?? null},
+  "ctMentions": ${raw.ctMentions},
+  "ctVelocity": ${raw.ctVelocity},
+  "mentionedByKOL": ${raw.mentionedByKOL},
+  "kolHandles": ${JSON.stringify(raw.kolHandles)},
+  "narrative": "<1 sentence describing the meme narrative>",
+  "narrativeScore": <0-25>,
+  "kolScore": <0-25>,
+  "safetyScore": <0-25>,
+  "volumeScore": <0-25>,
+  "gemScore": <0-100, sum of 4 scores>,
+  "gemBreakdown": "<why this score, max 300 chars>",
+  "rugRisk": "<exactly one of: low, medium, high, critical>",
+  "rugFlags": ["<flag1>", "<flag2>"],
+  "category": "<exactly one of: new_gem, trending, fading, pumped>",
+  "priceTarget": "<optional target price>",
+  "watchAction": "<exactly one of: buy_small, watch, avoid>",
+  "watchReason": "<reason, max 150 chars>",
+  "entryMarketCap": "<e.g. under $500K>",
+  "entryStrategy": "<concrete entry/exit strategy, max 200 chars>",
+  "x2Target": "<2x price target or null>",
+  "x5Target": "<5x price target or null>",
+  "developerFlags": [],
+  "dexUrl": ${raw.dexUrl ? `"${raw.dexUrl}"` : 'null'},
+  "source": "${raw.source}"
+}`,
     });
 
-    return { ...object, source: raw.source };
+    // Extract JSON from response
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) { console.error('[memes] no JSON in response for', raw.ticker); return null; }
+
+    let obj: Record<string, unknown>;
+    try { obj = JSON.parse(match[0]); }
+    catch (e) { console.error('[memes] JSON.parse failed for', raw.ticker, e); return null; }
+
+    const parsed = MemeTokenSchema.safeParse(obj);
+    if (!parsed.success) {
+      console.error('[memes] schema failed for', raw.ticker, JSON.stringify(parsed.error.issues[0]));
+      return null;
+    }
+    return parsed.data;
   } catch (err) {
     console.error('[memes] analyzeToken failed:', err);
     return null;
