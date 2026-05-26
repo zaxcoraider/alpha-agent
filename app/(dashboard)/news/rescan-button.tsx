@@ -5,7 +5,15 @@ import { RefreshCw } from 'lucide-react';
 
 type Status = 'idle' | 'running' | 'done' | 'error';
 
+const AGENT_LABELS: Record<string, string> = {
+  memes:     'Memes',
+  x_events:  'X Events',
+  nft_mints: 'NFT Mints',
+  news:      'News',
+};
+
 export function RescanButton({ agent }: { agent: string }) {
+  const label = AGENT_LABELS[agent] ?? 'Scan';
   const [status,  setStatus]  = useState<Status>('idle');
   const [saved,   setSaved]   = useState<number | null>(null);
   const [errMsg,  setErrMsg]  = useState('');
@@ -59,7 +67,7 @@ export function RescanButton({ agent }: { agent: string }) {
         className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <RefreshCw size={11} className={status === 'running' ? 'animate-spin' : ''} />
-        {status === 'running' ? 'Scanning…' : 'Scan Now'}
+        {status === 'running' ? `${label}…` : label}
       </button>
     </div>
   );
