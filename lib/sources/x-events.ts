@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 
 // ── Raw event schema ──────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ export async function scanXEvents(): Promise<RawXEvent[]> {
   let ctReport = '';
   try {
     const { text } = await generateText({
-      model:       dgrid(MODELS.grok),
+      model:       dgridNoTemp(MODELS.grok),
       abortSignal: AbortSignal.timeout(40_000),
       prompt: `Search X (Twitter) right now for the most important crypto events in the last 12-24 hours. Cover all 8 categories:
 
@@ -55,7 +55,8 @@ export async function scanXEvents(): Promise<RawXEvent[]> {
 Be specific: use real handles, real tickers, real dates, real engagement numbers. This data feeds a live crypto intelligence dashboard.`,
     });
     ctReport = text;
-  } catch {
+  } catch (err) {
+    console.error('[sources/x-events] Grok step-1 failed:', err);
     return [];
   }
 
@@ -82,7 +83,8 @@ Rules:
     });
 
     return object.events.map((e) => ({ ...e, source: 'grok' as const }));
-  } catch {
+  } catch (err) {
+    console.error('[sources/x-events] DeepSeek step-2 failed:', err);
     return [];
   }
 }

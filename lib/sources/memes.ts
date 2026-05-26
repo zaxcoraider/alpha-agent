@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 
 // ── Raw meme token schema from Grok ──────────────────────────────────────────
@@ -40,7 +40,7 @@ export async function scanCTForMemes(): Promise<RawMemeToken[]> {
   let ctReport = '';
   try {
     const { text } = await generateText({
-      model:       dgrid(MODELS.grok),
+      model:       dgridNoTemp(MODELS.grok),
       abortSignal: AbortSignal.timeout(40_000),
       prompt: `Search X (Twitter) right now for emerging meme coins with early alpha signals. Focus on Solana, Ethereum, Base, and BNB Chain.
 
@@ -58,7 +58,8 @@ For each token, report: name, ticker, chain, contract address, current market ca
 Priority: tokens under $1M mcap deployed <24h ago with growing CT velocity — that's the early gem signal.`,
     });
     ctReport = text;
-  } catch {
+  } catch (err) {
+    console.error('[sources/memes] Grok step-1 failed:', err);
     return [];
   }
 
@@ -84,26 +85,28 @@ Rules:
     });
 
     return object.tokens.map((t) => ({ ...t, source: 'grok' as const }));
-  } catch {
+  } catch (err) {
+    console.error('[sources/memes] DeepSeek step-2 failed:', err);
     return [];
   }
 }
 
-// ── DexScreener — top boosted / trending ─────────────────────────────────────
+// ── DexScreener — top boosted + latest profiles ──────────────────────────────
 
-type DexBoostToken = {
+type DexEntry = {
   tokenAddress: string;
   chainId: string;
   url: string;
   description?: string;
-  links?: { label?: string; url: string }[];
+  narrative?: string;
 };
 
 type DexPair = {
   chainId: string;
   baseToken: { address: string; name: string; symbol: string };
   priceUsd?: string;
-  volume?: { h24?: number };
+  txns?: { h1?: { buys: number; sells: number }; h24?: { buys: number; sells: number } };
+  volume?: { h1?: number; h24?: number };
   liquidity?: { usd?: number };
   priceChange?: { h1?: number; h24?: number };
   marketCap?: number;
@@ -116,67 +119,97 @@ const DEX_CHAIN_MAP: Record<string, RawMemeToken['chain'] | undefined> = {
   solana: 'sol', ethereum: 'eth', base: 'base', bsc: 'bnb',
 };
 
+async function enrichToken(entry: DexEntry): Promise<RawMemeToken | null> {
+  const chain = DEX_CHAIN_MAP[entry.chainId];
+  if (!chain) return null;
+  try {
+    const pairRes = await fetch(
+      `https://api.dexscreener.com/latest/dex/tokens/${entry.tokenAddress}`,
+      { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(8_000) },
+    );
+    if (!pairRes.ok) return null;
+
+    const pairData = await pairRes.json() as { pairs?: DexPair[] };
+    // pick the pair with highest 24h volume
+    const pairs = pairData.pairs ?? [];
+    const pair  = pairs.sort((a, b) => (b.volume?.h24 ?? 0) - (a.volume?.h24 ?? 0))[0];
+    if (!pair) return null;
+
+    const nowMs             = Date.now();
+    const deployedHoursAgo = Math.max(0, (nowMs - (pair.pairCreatedAt ?? nowMs)) / 3_600_000);
+
+    // derive a meme narrative hint from description
+    const desc = (entry.description ?? '').toLowerCase();
+    const narrative =
+      /ai|agent|llm|gpt|robot/.test(desc)    ? 'AI meme' :
+      /trump|biden|elon|maga|pepe/.test(desc) ? 'political figure' :
+      /dog|cat|shib|doge|animal/.test(desc)   ? 'animal' :
+      /tik.?tok|viral|trend/.test(desc)       ? 'trending news' :
+      entry.narrative ?? 'trending';
+
+    return {
+      name:             pair.baseToken.name,
+      ticker:           pair.baseToken.symbol,
+      chain,
+      contractAddress:  pair.baseToken.address,
+      marketCapUsd:     pair.marketCap ?? pair.fdv,
+      priceUsd:         pair.priceUsd ? parseFloat(pair.priceUsd) : undefined,
+      priceChange1h:    pair.priceChange?.h1,
+      priceChange24h:   pair.priceChange?.h24,
+      volumeUsd24h:     pair.volume?.h24,
+      liquidity:        pair.liquidity?.usd,
+      deployedHoursAgo: deployedHoursAgo,
+      ctMentions:       0,
+      ctVelocity:       0,
+      mentionedByKOL:   false,
+      kolHandles:       [],
+      narrative,
+      dexUrl:           entry.url,
+      source:           'dexscreener' as const,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchDexScreenerTrending(): Promise<RawMemeToken[]> {
   try {
-    // Top boosted tokens (free endpoint, no API key)
-    const res = await fetch('https://api.dexscreener.com/token-boosts/top/v1', {
-      headers: { accept: 'application/json' },
-      signal:  AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return [];
+  // Fetch top boosted AND latest profiles in parallel
+  const [boostsRes, profilesRes] = await Promise.allSettled([
+    fetch('https://api.dexscreener.com/token-boosts/top/v1',      { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }),
+    fetch('https://api.dexscreener.com/token-profiles/latest/v1', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) }),
+  ]);
 
-    const boosts = await res.json() as DexBoostToken[];
-    const top    = boosts.slice(0, 20);
+  const entries: DexEntry[] = [];
 
-    // Enrich with pair data for each token
-    const results: RawMemeToken[] = [];
+  if (boostsRes.status === 'fulfilled' && boostsRes.value.ok) {
+    const boosts = await boostsRes.value.json() as DexEntry[];
+    entries.push(...boosts.slice(0, 15).map((b) => ({ ...b, narrative: 'boosted' })));
+  }
+  if (profilesRes.status === 'fulfilled' && profilesRes.value.ok) {
+    const profiles = await profilesRes.value.json() as DexEntry[];
+    // Latest profiles = newest launches, high early-alpha value
+    entries.push(...profiles.slice(0, 15).map((p) => ({ ...p, narrative: 'new launch' })));
+  }
 
-    await Promise.all(top.map(async (boost) => {
-      const chain = DEX_CHAIN_MAP[boost.chainId];
-      if (!chain) return; // skip unsupported chains
+  // Deduplicate by tokenAddress
+  const seen = new Set<string>();
+  const unique = entries.filter((e) => {
+    if (seen.has(e.tokenAddress)) return false;
+    seen.add(e.tokenAddress);
+    return true;
+  });
 
-      try {
-        const pairRes = await fetch(
-          `https://api.dexscreener.com/latest/dex/tokens/${boost.tokenAddress}`,
-          { signal: AbortSignal.timeout(8_000) },
-        );
-        if (!pairRes.ok) return;
+  // Enrich all in parallel, drop failures
+  const settled = await Promise.allSettled(unique.map(enrichToken));
+  const results: RawMemeToken[] = [];
+  for (const r of settled) {
+    if (r.status === 'fulfilled' && r.value) results.push(r.value);
+  }
 
-        const pairData = await pairRes.json() as { pairs?: DexPair[] };
-        const pair     = pairData.pairs?.[0];
-        if (!pair) return;
-
-        const nowMs          = Date.now();
-        const deployedMs     = pair.pairCreatedAt ?? nowMs;
-        const deployedHoursAgo = Math.max(0, (nowMs - deployedMs) / 3_600_000);
-
-        results.push({
-          name:             pair.baseToken.name,
-          ticker:           pair.baseToken.symbol,
-          chain,
-          contractAddress:  pair.baseToken.address,
-          marketCapUsd:     pair.marketCap ?? pair.fdv,
-          priceUsd:         pair.priceUsd ? parseFloat(pair.priceUsd) : undefined,
-          priceChange1h:    pair.priceChange?.h1,
-          priceChange24h:   pair.priceChange?.h24,
-          volumeUsd24h:     pair.volume?.h24,
-          liquidity:        pair.liquidity?.usd,
-          deployedHoursAgo: Math.round(deployedHoursAgo),
-          ctMentions:       0,
-          ctVelocity:       0,
-          mentionedByKOL:   false,
-          kolHandles:       [],
-          narrative:        'trending',
-          dexUrl:           boost.url,
-          source:           'dexscreener' as const,
-        });
-      } catch {
-        // skip tokens that fail enrichment
-      }
-    }));
-
-    return results;
-  } catch {
+  return results;
+  } catch (err) {
+    console.error('[sources/memes] fetchDexScreenerTrending failed:', err);
     return [];
   }
 }

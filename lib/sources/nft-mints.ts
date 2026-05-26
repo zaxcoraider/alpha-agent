@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { env } from '@/lib/env';
 
@@ -39,7 +39,7 @@ export async function scanCTForMints(): Promise<RawNFTProject[]> {
   let ctReport = '';
   try {
     const { text } = await generateText({
-      model:       dgrid(MODELS.grok),
+      model:       dgridNoTemp(MODELS.grok),
       abortSignal: AbortSignal.timeout(40_000),
       prompt: `Search X (Twitter) right now for NFT mint opportunities — live, about to launch, or just announced. Focus on early signals with few mentions.
 
@@ -58,7 +58,8 @@ For each project found, report: project name, chain, mint price, mint status (li
 Prioritize projects with fewer than 50 mentions that are growing fast — those are early alpha.`,
     });
     ctReport = text;
-  } catch {
+  } catch (err) {
+    console.error('[sources/nft-mints] Grok step-1 failed:', err);
     return [];
   }
 
@@ -85,7 +86,8 @@ Rules:
     });
 
     return object.projects.map((p) => ({ ...p, source: 'grok' as const }));
-  } catch {
+  } catch (err) {
+    console.error('[sources/nft-mints] DeepSeek step-2 failed:', err);
     return [];
   }
 }

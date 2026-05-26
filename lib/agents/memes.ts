@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { scanCTForMemes, fetchDexScreenerTrending, type RawMemeToken } from '@/lib/sources/memes';
 
@@ -64,7 +64,7 @@ async function analyzeToken(raw: RawMemeToken, grokContext: string): Promise<Mem
       : 'unknown';
 
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),
+      model:       dgridNoTemp(MODELS.balanced),
       schema:      MemeTokenSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
@@ -139,7 +139,8 @@ Be honest. Most meme coins fail — score low if signals are weak.`,
     });
 
     return { ...object, source: raw.source };
-  } catch {
+  } catch (err) {
+    console.error('[memes] analyzeToken failed:', err);
     return null;
   }
 }
@@ -174,15 +175,15 @@ export async function runMemesScan(): Promise<{ tokens: MemeToken[]; scanned: nu
     const tickerList = ordered.map((t) => `$${t.ticker} (${t.chain.toUpperCase()})`).join(', ');
     try {
       const { text } = await generateText({
-        model:       dgrid(MODELS.grok),
+        model:       dgridNoTemp(MODELS.grok),
         abortSignal: AbortSignal.timeout(40_000),
         prompt: `Search X (Twitter) right now for these meme tokens and give me a live CT update for each: ${tickerList}.
 
 For each token, cover: is CT bullish or bearish, which KOLs are posting about it, any red flags (rug warnings, honeypot alerts, dev selling), any positive signals (whale buys, viral posts, partnership news). 1-3 sentences per token. If no mentions found, say so.`,
       });
       grokContext = text;
-    } catch {
-      // proceed without live enrichment
+    } catch (err) {
+      console.error('[memes] Grok enrichment failed:', err);
     }
   }
 

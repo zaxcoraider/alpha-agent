@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import {
   scanCTForMints,
@@ -56,7 +56,7 @@ export type NFTMint = z.infer<typeof NFTMintSchema>;
 async function analyzeProject(raw: RawNFTProject, grokContext: string): Promise<NFTMint | null> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),
+      model:       dgridNoTemp(MODELS.balanced),
       schema:      NFTMintSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
@@ -123,7 +123,8 @@ Be precise and honest. If signals are weak, score low.`,
     });
 
     return { ...object, source: raw.source };
-  } catch {
+  } catch (err) {
+    console.error('[nft-mints] analyzeProject failed:', err);
     return null;
   }
 }
@@ -162,15 +163,15 @@ export async function runNFTMintsScan(): Promise<{
     const nameList = grokFirst.map((p) => `${p.name} (${p.chain.toUpperCase()})`).join(', ');
     try {
       const { text } = await generateText({
-        model:       dgrid(MODELS.grok),
+        model:       dgridNoTemp(MODELS.grok),
         abortSignal: AbortSignal.timeout(40_000),
         prompt: `Search X (Twitter) right now for these NFT projects and give me a live CT update for each: ${nameList}.
 
 For each project: is it being discussed on X? Which KOLs are talking about it? Any red flags (rug warnings, team drama, contract issues)? Any positive signals (whale mints, celebrity endorsements, viral posts)? Is the mint currently live? 1-3 sentences per project. If no mentions found, say so.`,
       });
       grokContext = text;
-    } catch {
-      // proceed without live enrichment
+    } catch (err) {
+      console.error('[nft-mints] Grok enrichment failed:', err);
     }
   }
 

@@ -1,6 +1,6 @@
 import { generateText, generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { scanXEvents, type RawXEvent } from '@/lib/sources/x-events';
 
@@ -39,7 +39,7 @@ export type XEvent = z.infer<typeof XEventSchema>;
 async function scoreEvent(raw: RawXEvent, grokContext: string): Promise<XEvent | null> {
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),
+      model:       dgridNoTemp(MODELS.balanced),
       schema:      XEventSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
@@ -83,7 +83,8 @@ Be precise and realistic. Most events are 4-6 relevance.`,
     });
 
     return { ...object, source: raw.source };
-  } catch {
+  } catch (err) {
+    console.error('[x-events] scoreEvent failed:', err);
     return null;
   }
 }
@@ -107,7 +108,7 @@ export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: num
     const titles = unique.slice(0, 15).map((e) => `- ${e.type}: ${e.title}`).join('\n');
     try {
       const { text } = await generateText({
-        model:       dgrid(MODELS.grok),
+        model:       dgridNoTemp(MODELS.grok),
         abortSignal: AbortSignal.timeout(40_000),
         prompt: `Search X (Twitter) right now to verify and enrich these crypto events. For each, confirm if it's real/trending and add any missing details:
 
@@ -116,8 +117,8 @@ ${titles}
 For each event: is it confirmed on X? Current engagement? Any updates or corrections? Any related KOL posts I should know about? Keep it brief.`,
       });
       grokContext = text;
-    } catch {
-      // proceed without live verification
+    } catch (err) {
+      console.error('[x-events] Grok enrichment failed:', err);
     }
   }
 
