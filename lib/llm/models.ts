@@ -10,14 +10,18 @@ export const MODELS = {
   // ── DeepSeek ───────────────────────────────────────────────────────────────
   // "exacto" = fine-tuned for structured/exact output → best for generateObject
   analyst:     'deepseek/deepseek-v3.1-terminus', // prediction analysts (better than v3.2)
-  exacto:      'deepseek/deepseek-v3.1-terminus-exacto', // generateObject calls (structured)
+  // DGrid uses ":exacto" suffix (colon, not dash) — master list typo'd as -exacto.
+  exacto:      'deepseek/deepseek-v3.1-terminus:exacto', // generateObject calls (structured)
   classifier:  'deepseek/deepseek-v3.2',          // news/nft/meme classification
   fast:        'deepseek/deepseek-v4-flash',       // cheapest + fastest (MiroFish boost LLM)
   reasoner_ds: 'deepseek/deepseek-r1-0528',       // deep math + crypto reasoning
 
   // ── xAI Grok ───────────────────────────────────────────────────────────────
-  grok:        'xai/grok-4.3',                    // live X/Twitter signal — 4.20 is 404 on DGrid
-  grok_think:  'xai/grok-4.3',                    // fallback to same until 4.20 is re-listed
+  // DGrid registers the xAI provider as "x-ai/" (dashed), NOT "xai/". Using "xai/"
+  // returns model_not_found even though /v1/models lists the model under x-ai/.
+  // Verified empirically against /v1/models on 2026-05-27.
+  grok:        'x-ai/grok-4.20-non-reasoning',    // live X/Twitter signal — primary scanner model
+  grok_think:  'x-ai/grok-4.20-reasoning',        // reasoning variant for deeper analysis
 
   // ── Google ─────────────────────────────────────────────────────────────────
   vision:      'google/gemini-2.5-pro',           // vision + long-context tasks
@@ -31,7 +35,9 @@ export const MODELS = {
   qwen_fast:   'qwen/qwen3.5-flash',              // fast Chinese LLM
 
   // ── Chimera (TNG) ──────────────────────────────────────────────────────────
-  chimera:     'tng/deepseek-r1t2-chimera',       // R1 reasoning fused with instruction tuning
+  // DGrid lists tngtech/deepseek-r1t2-chimera in /v1/models but returns "no endpoints found"
+  // when called — provider is dead as of 2026-05-27. Keep the entry but it will fail at runtime.
+  chimera:     'tngtech/deepseek-r1t2-chimera',   // R1 reasoning fused with instruction tuning (currently no endpoints)
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
