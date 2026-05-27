@@ -105,7 +105,7 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
       { id: 'openai/o3-deep-research',       label: 'o3 Deep Research',   desc: 'Extended research mode' },
       { id: 'openai/o4-mini-high',           label: 'o4 Mini High',       desc: 'Fast reasoning' },
       { id: 'openai/o4-mini',                label: 'o4 Mini',            desc: 'Cheap reasoning' },
-      { id: 'openai/gpt-oss-120b',           label: 'GPT OSS 120B',       desc: 'Open weights 120B' },
+      { id: 'openai/gpt-oss-120b:free',      label: 'GPT OSS 120B',       desc: 'Open weights 120B (free tier)' },
       { id: 'openai/gpt-4o',                 label: 'GPT-4o',             desc: 'Multimodal' },
       { id: 'openai/gpt-4.1',                label: 'GPT-4.1',            desc: 'Balanced' },
       { id: 'openai/gpt-4.1-mini',           label: 'GPT-4.1 Mini',       desc: 'Fast + cheap' },
@@ -124,7 +124,6 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
       { id: 'anthropic/claude-sonnet-4.5',        label: 'Claude Sonnet 4.5',      desc: 'Previous Sonnet' },
       { id: 'anthropic/claude-sonnet-4',          label: 'Claude Sonnet 4',        desc: 'Base Sonnet 4' },
       { id: 'anthropic/claude-haiku-4.5',         label: 'Claude Haiku 4.5',       desc: 'Fastest Claude' },
-      { id: 'anthropic/claude-3.7-sonnet-thinking', label: 'Claude 3.7 Thinking',  desc: 'Extended thinking mode' },
     ],
   },
   {
@@ -145,10 +144,10 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
     key:      'xai',
     badge:    'text-white',
     models: [
-      { id: 'xai/grok-4.20-reasoning',      label: 'Grok 4.20 Thinking',   desc: 'Deep reasoning + live X data' },
-      { id: 'xai/grok-4.20-non-reasoning',  label: 'Grok 4.20',            desc: 'Fast + live X/Twitter' },
+      { id: 'x-ai/grok-4.20-reasoning',     label: 'Grok 4.20 Thinking',   desc: 'Deep reasoning + live X data' },
+      { id: 'x-ai/grok-4.20-non-reasoning', label: 'Grok 4.20',            desc: 'Fast + live X/Twitter' },
       { id: 'x-ai/grok-4.20-multi-agent',   label: 'Grok Multi-Agent',     desc: 'Agentic tasks + X data' },
-      { id: 'xai/grok-4.3',                 label: 'Grok 4.3',             desc: 'Previous Grok' },
+      { id: 'x-ai/grok-4.3',                label: 'Grok 4.3',             desc: 'Previous Grok' },
     ],
   },
   {
@@ -158,10 +157,9 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
     models: [
       { id: 'deepseek/deepseek-r1-0528',              label: 'DeepSeek R1',            desc: 'Best math + reasoning' },
       { id: 'deepseek/deepseek-r1',                   label: 'DeepSeek R1 Base',       desc: 'R1 base variant' },
-      { id: 'tng/deepseek-r1t2-chimera',              label: 'R1T2 Chimera',           desc: 'R1 reasoning + instruction tuning' },
       { id: 'deepseek/deepseek-v4-pro',               label: 'DeepSeek V4 Pro',        desc: 'Top-tier instruction model' },
       { id: 'deepseek/deepseek-v3.1-terminus',        label: 'DeepSeek V3.1 Terminus', desc: 'Best V3 variant' },
-      { id: 'deepseek/deepseek-v3.1-terminus-exacto', label: 'V3.1 Terminus Exacto',   desc: 'Structured output optimized' },
+      { id: 'deepseek/deepseek-v3.1-terminus:exacto', label: 'V3.1 Terminus Exacto',   desc: 'Structured output optimized' },
       { id: 'deepseek/deepseek-v3.2',                 label: 'DeepSeek V3.2',          desc: 'Fast + capable' },
       { id: 'deepseek/deepseek-v3.2-exp',             label: 'DeepSeek V3.2 Exp',      desc: 'Experimental V3.2' },
       { id: 'deepseek/deepseek-v4-flash',             label: 'DeepSeek V4 Flash',      desc: 'Fastest + cheapest' },
@@ -207,10 +205,10 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
     key:      'zai',
     badge:    'text-teal-400',
     models: [
-      { id: 'zai/glm-5.1',       label: 'GLM-5.1',       desc: 'Latest GLM flagship' },
-      { id: 'zai/glm-5',         label: 'GLM-5',          desc: 'GLM-5 base' },
-      { id: 'zai/glm-4.7',       label: 'GLM-4.7',        desc: 'Strong GLM-4 series' },
-      { id: 'zai/glm-4.6-exacto', label: 'GLM-4.6 Exacto', desc: 'Structured output optimized' },
+      { id: 'z-ai/glm-5.1',        label: 'GLM-5.1',        desc: 'Latest GLM flagship' },
+      { id: 'z-ai/glm-5',          label: 'GLM-5',          desc: 'GLM-5 base' },
+      { id: 'z-ai/glm-4.7',        label: 'GLM-4.7',        desc: 'Strong GLM-4 series' },
+      { id: 'z-ai/glm-4.6:exacto', label: 'GLM-4.6 Exacto', desc: 'Structured output optimized' },
     ],
   },
   {
@@ -221,14 +219,6 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
       { id: 'xiaomi/mimo-v2.5-pro', label: 'MiMo V2.5 Pro', desc: 'Flagship MiMo' },
       { id: 'xiaomi/mimo-v2.5',     label: 'MiMo V2.5',     desc: 'Standard MiMo' },
       { id: 'xiaomi/mimo-v2-omni',  label: 'MiMo V2 Omni',  desc: 'Multimodal MiMo' },
-    ],
-  },
-  {
-    provider: 'Mistral',
-    key:      'mistral',
-    badge:    'text-yellow-400',
-    models: [
-      { id: 'mistral/mixtral-8x7b-instruct', label: 'Mixtral 8×7B', desc: 'Open MoE, fast + cheap' },
     ],
   },
 ];
