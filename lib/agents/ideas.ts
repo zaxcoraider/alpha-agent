@@ -45,7 +45,7 @@ export async function runIdeasSynthesis(contextSummary: string): Promise<IdeasBa
   const { object } = await generateObject({
     model:       dgridNoTemp(MODELS.reasoner), // Claude Opus 4.7 — synthesis needs best model
     schema:      IdeasBatchSchema,
-    abortSignal: AbortSignal.timeout(60_000),
+    abortSignal: AbortSignal.timeout(180_000), // Opus + 15-idea batch + weekly report needs ~90-150s
     prompt: `You are the Alpha Synthesizer — a senior crypto strategist who reads signals from multiple intelligence feeds and distills them into high-conviction ideas.
 
 Here is the latest intelligence snapshot from all scanners (last 24 hours):
