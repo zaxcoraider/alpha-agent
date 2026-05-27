@@ -17,7 +17,7 @@ export const predictionScan = inngest.createFunction(
         agent: 'prediction',
         trigger: 'cron',
         status: 'running',
-        modelUsed: 'anthropic/claude-opus-4.7 + xai/grok-4.20 + MiroFish',
+        modelUsed: 'anthropic/claude-opus-4.7 + x-ai/grok-4.20-non-reasoning + MiroFish',
       }).returning();
       return r;
     });

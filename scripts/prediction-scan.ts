@@ -16,7 +16,7 @@ async function main() {
     agent: 'prediction',
     trigger: 'cron',
     status: 'running',
-    modelUsed: 'deepseek-v3.1-terminus-exacto + claude-opus-4.7 + MiroFish',
+    modelUsed: 'deepseek-v3.1-terminus:exacto + claude-opus-4.7 + MiroFish',
   }).returning();
 
   try {
