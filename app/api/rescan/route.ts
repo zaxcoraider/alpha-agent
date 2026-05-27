@@ -19,6 +19,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `Unknown agent: ${agent}` }, { status: 400 });
   }
 
+  // Inngest needs INNGEST_EVENT_KEY in prod to actually deliver events. When
+  // unset, inngest.send() resolves successfully but the event is dropped —
+  // user sees a fake "queued" success. Be honest instead.
+  if (!process.env.INNGEST_EVENT_KEY) {
+    return NextResponse.json(
+      {
+        error:
+          `Inngest not configured (INNGEST_EVENT_KEY missing). ` +
+          `Manual scans for "${agent}" run on the VPS schedule, not from this button. ` +
+          `Set INNGEST_EVENT_KEY in Vercel env vars to enable manual queueing.`,
+      },
+      { status: 503 },
+    );
+  }
+
   await inngest.send({ name: eventName, data: { trigger: 'manual' } });
 
   return NextResponse.json({ ok: true, agent, event: eventName });
