@@ -3,7 +3,6 @@ import { scanResults, scanRuns } from '@/lib/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import type { Idea, WeeklyReport } from '@/lib/agents/ideas';
 import { IdeasClient } from './ideas-client';
-import { RescanButton } from '@/app/(dashboard)/news/rescan-button';
 
 async function getData(): Promise<{ ideas: Idea[]; weeklyReport: WeeklyReport | null }> {
   try {
@@ -51,20 +50,17 @@ export default async function IdeasPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Alpha Ideas</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Synthesis layer — Build, Trade &amp; Narrative ideas generated from all scanners · every 6 hours
+      <div>
+        <h1 className="text-2xl font-bold">Alpha Ideas</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Synthesis layer — Build, Trade &amp; Narrative ideas generated from all scanners. Scan each section individually.
+        </p>
+        {lastRun?.finishedAt && (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Last synthesis: {new Date(lastRun.finishedAt).toLocaleString()} ·{' '}
+            {lastRun.itemsFound ?? 0} ideas generated
           </p>
-          {lastRun?.finishedAt && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Last synthesis: {new Date(lastRun.finishedAt).toLocaleString()} ·{' '}
-              {lastRun.itemsFound ?? 0} ideas generated
-            </p>
-          )}
-        </div>
-        <RescanButton agent="ideas" />
+        )}
       </div>
 
       {ideas.length === 0 && !weeklyReport ? (

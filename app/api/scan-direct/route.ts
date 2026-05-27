@@ -8,7 +8,14 @@ import { runXEventsScan } from '@/lib/agents/x-events';
 import { runNFTMintsScan } from '@/lib/agents/nft-mints';
 import { runNewsScan } from '@/lib/agents/news';
 import { runDevEventsScan } from '@/lib/agents/dev-events';
-import { runIdeasSynthesis } from '@/lib/agents/ideas';
+import {
+  runIdeasSynthesis,
+  runBuildIdeasSynthesis,
+  runTradeIdeasSynthesis,
+  runNarrativeSynthesis,
+  runWeeklyReport,
+  type Idea,
+} from '@/lib/agents/ideas';
 
 export const runtime    = 'nodejs';
 export const maxDuration = 300; // 5 min — needs Vercel Pro; Hobby caps at 60s
@@ -25,6 +32,92 @@ const CHAIN_MAP: Record<string, DbChain> = {
 function toDbChains(chains: string[]): DbChain[] {
   const mapped = chains.map((c) => CHAIN_MAP[c.toLowerCase()] ?? 'unknown');
   return [...new Set(mapped)];
+}
+
+// ── Shared helpers for the Ideas section endpoints ─────────────────────────────
+
+async function buildIdeasContextSummary(): Promise<string> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1_000);
+  const rows = await db
+    .select({
+      agent:   scanResults.agent,
+      title:   scanResults.title,
+      summary: scanResults.summary,
+      score:   scanResults.score,
+    })
+    .from(scanResults)
+    .where(gte(scanResults.createdAt, cutoff))
+    .orderBy(desc(scanResults.score), desc(scanResults.createdAt))
+    .limit(100);
+
+  const agentLabels: Record<string, string> = {
+    prediction: 'PREDICTION MARKETS', news: 'NEWS', nft: 'NFT MINTS',
+    memes: 'MEME TOKENS', x_events: 'X EVENTS', dev_events: 'DEV EVENTS / HACKATHONS',
+  };
+  const grouped: Record<string, typeof rows> = {};
+  for (const r of rows) {
+    if (r.agent === 'ideas') continue;
+    (grouped[r.agent] ??= []).push(r);
+  }
+  const sections: string[] = [];
+  for (const [a, items] of Object.entries(grouped)) {
+    const label = agentLabels[a] ?? a.toUpperCase();
+    const lines = items.slice(0, 15).map((r) => {
+      const score = r.score ? ` [score: ${r.score}]` : '';
+      const summary = r.summary ? ` — ${r.summary.slice(0, 120)}` : '';
+      return `  • ${r.title}${score}${summary}`;
+    });
+    sections.push(`## ${label} (${items.length} items)\n${lines.join('\n')}`);
+  }
+  return sections.length ? sections.join('\n\n') : 'No recent scan data available.';
+}
+
+async function saveIdeas(runId: string, ideas: Idea[]) {
+  for (const idea of ideas) {
+    const externalId = `idea-${Buffer.from(idea.title.slice(0, 60)).toString('base64').slice(0, 40)}`;
+    await db.insert(scanResults).values({
+      runId, agent: 'ideas', externalId,
+      title:   idea.title,
+      summary: idea.tldr,
+      score:   String(idea.conviction),
+      chains:  idea.chains as DbChain[],
+      raw:     idea,
+    }).onConflictDoUpdate({
+      target: [scanResults.agent, scanResults.externalId],
+      set: { summary: idea.tldr, score: String(idea.conviction), raw: idea },
+    });
+  }
+}
+
+async function runIdeasSection(
+  section: 'build' | 'trade' | 'narrative' | 'weekly',
+  run: { id: string },
+) {
+  const ctx = await buildIdeasContextSummary();
+
+  if (section === 'weekly') {
+    const { report } = await runWeeklyReport(ctx);
+    const reportId = `idea-weekly-report-${new Date().toISOString().slice(0, 10)}`;
+    await db.insert(scanResults).values({
+      runId: run.id, agent: 'ideas', externalId: reportId,
+      title:   `Weekly Alpha Report — ${new Date().toLocaleDateString()}`,
+      summary: report.headline,
+      score:   '10',
+      chains:  [],
+      raw:     { type: 'weekly_report', ...report },
+    }).onConflictDoUpdate({
+      target: [scanResults.agent, scanResults.externalId],
+      set: { summary: report.headline, raw: { type: 'weekly_report', ...report } },
+    });
+    return 1;
+  }
+
+  const fn = section === 'build'  ? runBuildIdeasSynthesis
+           : section === 'trade'  ? runTradeIdeasSynthesis
+           :                        runNarrativeSynthesis;
+  const { ideas } = await fn(ctx);
+  await saveIdeas(run.id, ideas);
+  return ideas.length;
 }
 
 export async function POST(req: Request) {
@@ -225,64 +318,38 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── Ideas (synthesizes across all recent scan results) ────────────────────
+  // ── Ideas — per-section endpoints (each fits in 60s on Vercel Hobby) ──────
+  // ideas_build / ideas_trade / ideas_narrative / ideas_weekly
+  // Also: `ideas` (legacy) runs all 4 in parallel — may exceed 60s on Hobby.
+  if (agent === 'ideas_build' || agent === 'ideas_trade' || agent === 'ideas_narrative' || agent === 'ideas_weekly') {
+    const section = agent.slice('ideas_'.length) as 'build' | 'trade' | 'narrative' | 'weekly';
+    const [run] = await db.insert(scanRuns).values({
+      agent: 'ideas', trigger: 'manual', status: 'running', modelUsed: MODELS.reasoner,
+    }).returning();
+
+    try {
+      const saved = await runIdeasSection(section, run);
+      await db.update(scanRuns)
+        .set({ status: 'ok', finishedAt: new Date(), itemsFound: String(saved) })
+        .where(eq(scanRuns.id, run.id));
+      return NextResponse.json({ ok: true, saved, section });
+    } catch (err) {
+      console.error(`[scan-direct/ideas_${section}]`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      await db.update(scanRuns).set({ status: 'error', finishedAt: new Date(), error: msg.slice(0, 500) }).where(eq(scanRuns.id, run.id));
+      return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    }
+  }
+
   if (agent === 'ideas') {
     const [run] = await db.insert(scanRuns).values({
       agent: 'ideas', trigger: 'manual', status: 'running', modelUsed: MODELS.reasoner,
     }).returning();
 
     try {
-      // Build context summary from last 24h of scan results — same as ideas-scan inngest function
-      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1_000);
-      const rows = await db
-        .select({
-          agent:   scanResults.agent,
-          title:   scanResults.title,
-          summary: scanResults.summary,
-          score:   scanResults.score,
-        })
-        .from(scanResults)
-        .where(gte(scanResults.createdAt, cutoff))
-        .orderBy(desc(scanResults.score), desc(scanResults.createdAt))
-        .limit(100);
-
-      const agentLabels: Record<string, string> = {
-        prediction: 'PREDICTION MARKETS', news: 'NEWS', nft: 'NFT MINTS',
-        memes: 'MEME TOKENS', x_events: 'X EVENTS', dev_events: 'DEV EVENTS / HACKATHONS',
-      };
-      const grouped: Record<string, typeof rows> = {};
-      for (const r of rows) {
-        if (r.agent === 'ideas') continue;
-        (grouped[r.agent] ??= []).push(r);
-      }
-      const sections: string[] = [];
-      for (const [a, items] of Object.entries(grouped)) {
-        const label = agentLabels[a] ?? a.toUpperCase();
-        const lines = items.slice(0, 15).map((r) => {
-          const score = r.score ? ` [score: ${r.score}]` : '';
-          const summary = r.summary ? ` — ${r.summary.slice(0, 120)}` : '';
-          return `  • ${r.title}${score}${summary}`;
-        });
-        sections.push(`## ${label} (${items.length} items)\n${lines.join('\n')}`);
-      }
-      const contextSummary = sections.length ? sections.join('\n\n') : 'No recent scan data available.';
-
-      const batch = await runIdeasSynthesis(contextSummary);
-
-      for (const idea of batch.ideas) {
-        const externalId = `idea-${Buffer.from(idea.title.slice(0, 60)).toString('base64').slice(0, 40)}`;
-        await db.insert(scanResults).values({
-          runId: run.id, agent: 'ideas', externalId,
-          title:   idea.title,
-          summary: idea.tldr,
-          score:   String(idea.conviction),
-          chains:  idea.chains as DbChain[],
-          raw:     idea,
-        }).onConflictDoUpdate({
-          target: [scanResults.agent, scanResults.externalId],
-          set: { summary: idea.tldr, score: String(idea.conviction), raw: idea },
-        });
-      }
+      const ctx = await buildIdeasContextSummary();
+      const batch = await runIdeasSynthesis(ctx);
+      await saveIdeas(run.id, batch.ideas);
 
       const reportId = `idea-weekly-report-${new Date().toISOString().slice(0, 10)}`;
       await db.insert(scanResults).values({

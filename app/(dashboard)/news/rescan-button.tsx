@@ -6,10 +6,16 @@ import { RefreshCw } from 'lucide-react';
 type Status = 'idle' | 'running' | 'done' | 'error';
 
 const AGENT_LABELS: Record<string, string> = {
-  memes:     'Memes',
-  x_events:  'X Events',
-  nft_mints: 'NFT Mints',
-  news:      'News',
+  memes:           'Memes',
+  x_events:        'X Events',
+  nft_mints:       'NFT Mints',
+  news:            'News',
+  dev_events:      'Dev Events',
+  ideas:           'All Ideas',
+  ideas_build:     'Build',
+  ideas_trade:     'Trade',
+  ideas_narrative: 'Narrative',
+  ideas_weekly:    'Weekly Report',
 };
 
 export function RescanButton({ agent }: { agent: string }) {

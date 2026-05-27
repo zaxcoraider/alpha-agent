@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef } from 'react';
 import type { Idea, WeeklyReport } from '@/lib/agents/ideas';
+import { RescanButton } from '@/app/(dashboard)/news/rescan-button';
 import {
   Hammer, TrendingUp, Layers, FileText,
   ChevronDown, ChevronUp, Sparkles, X,
@@ -406,13 +407,14 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
     });
   }, [ideas, tab, sort, minConviction]);
 
-  const tabs: { key: Tab; label: string; count?: number; Icon: React.ElementType }[] = [
-    { key: 'all',       label: 'All Ideas',  count: ideas.length,                             Icon: Sparkles   },
-    { key: 'build',     label: 'Build',      count: ideas.filter((i) => i.type === 'build').length,     Icon: Hammer     },
-    { key: 'trade',     label: 'Trade',      count: ideas.filter((i) => i.type === 'trade').length,     Icon: TrendingUp },
-    { key: 'narrative', label: 'Narrative',  count: ideas.filter((i) => i.type === 'narrative').length, Icon: Layers     },
-    { key: 'report',    label: 'Weekly Report', Icon: FileText },
+  const tabs: { key: Tab; label: string; count?: number; Icon: React.ElementType; scanAgent?: string }[] = [
+    { key: 'all',       label: 'All Ideas',  count: ideas.length,                                        Icon: Sparkles,   scanAgent: 'ideas'           },
+    { key: 'build',     label: 'Build',      count: ideas.filter((i) => i.type === 'build').length,     Icon: Hammer,     scanAgent: 'ideas_build'     },
+    { key: 'trade',     label: 'Trade',      count: ideas.filter((i) => i.type === 'trade').length,     Icon: TrendingUp, scanAgent: 'ideas_trade'     },
+    { key: 'narrative', label: 'Narrative',  count: ideas.filter((i) => i.type === 'narrative').length, Icon: Layers,     scanAgent: 'ideas_narrative' },
+    { key: 'report',    label: 'Weekly Report',                                                          Icon: FileText,   scanAgent: 'ideas_weekly'    },
   ];
+  const activeTab = tabs.find((t) => t.key === tab);
 
   const sorts: { key: SortKey; label: string }[] = [
     { key: 'conviction', label: 'Conviction' },
@@ -424,27 +426,34 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
     <div className="flex flex-col gap-6">
       {briefIdea && <BriefModal idea={briefIdea} onClose={() => setBriefIdea(null)} />}
 
-      {/* Tab bar */}
-      <div className="flex items-center gap-1 border-b border-border pb-0 -mb-1 overflow-x-auto">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
-              tab === t.key
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <t.Icon className="h-3.5 w-3.5" />
-            {t.label}
-            {t.count !== undefined && (
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                tab === t.key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-muted-foreground'
-              }`}>{t.count}</span>
-            )}
-          </button>
-        ))}
+      {/* Tab bar + per-section Scan button */}
+      <div className="flex items-end justify-between gap-3 border-b border-border -mb-1">
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab === t.key
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <t.Icon className="h-3.5 w-3.5" />
+              {t.label}
+              {t.count !== undefined && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                  tab === t.key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-muted-foreground'
+                }`}>{t.count}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        {activeTab?.scanAgent && (
+          <div className="pb-2 shrink-0">
+            <RescanButton agent={activeTab.scanAgent} />
+          </div>
+        )}
       </div>
 
       {/* Report tab */}
