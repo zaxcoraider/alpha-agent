@@ -1,11 +1,16 @@
 import { streamText } from 'ai';
 import { dgrid, dgridNoTemp } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { AGENT_MODELS } from '@/lib/llm/models';
 
 export const runtime  = 'nodejs';
 export const maxDuration = 120;
 
-const NO_TEMP = ['anthropic/claude-opus-4.7', 'anthropic/claude-opus-4.6', 'anthropic/claude-opus-4.5', 'anthropic/claude-opus-4'];
+// Models that reject the `temperature` param entirely (Opus + OpenAI reasoning).
+const NO_TEMP = [
+  'anthropic/claude-opus-4.7', 'anthropic/claude-opus-4.6', 'anthropic/claude-opus-4.5', 'anthropic/claude-opus-4',
+  'openai/o3', 'openai/o3-pro', 'openai/o3-mini', 'openai/o3-mini-high', 'openai/o3-deep-research',
+  'openai/gpt-5.5', 'openai/gpt-5.5-pro', 'openai/gpt-5.3-codex',
+];
 
 export async function POST(req: Request) {
   const { brief, resources, model } = await req.json() as {
@@ -14,7 +19,9 @@ export async function POST(req: Request) {
     model?:    string;
   };
 
-  const modelId     = typeof model === 'string' && model.length > 0 ? model : MODELS.reasoner;
+  // Default to GPT-5.3 Codex — the best agentic coder for Strategist build plans.
+  // User can still override via the model param from the UI.
+  const modelId     = typeof model === 'string' && model.length > 0 ? model : AGENT_MODELS.strategist;
   const supportsTemp = !NO_TEMP.includes(modelId);
   const resourcesBlock = resources.length > 0
     ? '\n\nRESOURCES / LINKS:\n' + resources.map((r, i) =>
