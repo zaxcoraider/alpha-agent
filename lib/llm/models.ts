@@ -1,43 +1,72 @@
-// DGrid model catalog — verified against master list (May 20 2026, 139 models)
-// All model strings follow provider/model-name convention (OpenRouter-compatible)
+// DGrid model catalog — verified against /v1/models (2026-05-29)
+// All model strings follow provider/model-name convention (OpenRouter-compatible).
+//
+// Provider prefix gotchas (silent 404 sources):
+//  - xAI is `x-ai/` (dashed), NOT `xai/`.
+//  - ZAI is `z-ai/` (dashed), NOT `zai/`.
+//  - Exacto variants use `:exacto` (colon), NOT `-exacto`.
+//  - Llama provider is `meta-llama/`, free tier suffix is `:free`.
+//  - tngtech/* (Chimera) and mistralai/mixtral-8x7b currently have no endpoints — avoid.
+//
+// Naming convention for keys:
+//  - reasoner*  → flagship synthesis / aggregation
+//  - analyst*   → balanced reasoning, prediction analyst pool
+//  - classifier → cheap structured classification
+//  - exacto*    → fine-tuned for generateObject (structured JSON)
+//  - free_*     → zero-cost (rate-limited) — only for pre-filters/dedup
 
 export const MODELS = {
   // ── Anthropic ──────────────────────────────────────────────────────────────
-  reasoner:    'anthropic/claude-opus-4.7',       // synthesis, aggregation, ideas
-  balanced:    'anthropic/claude-sonnet-4.6',     // chat default, analyst ensemble
-  fast_claude: 'anthropic/claude-haiku-4.5',      // quick Claude tasks
+  reasoner:    'anthropic/claude-opus-4.7',       // synthesis, rug detection, Build Ideas, alpha calls
+  balanced:    'anthropic/claude-sonnet-4.6',     // Dev Events, X summaries, Chat default — 1M ctx
+  fast_claude: 'anthropic/claude-haiku-4.5',      // legacy — Llama free covers budget end
 
   // ── DeepSeek ───────────────────────────────────────────────────────────────
-  // "exacto" = fine-tuned for structured/exact output → best for generateObject
-  analyst:     'deepseek/deepseek-v3.1-terminus', // prediction analysts (better than v3.2)
-  // DGrid uses ":exacto" suffix (colon, not dash) — master list typo'd as -exacto.
-  exacto:      'deepseek/deepseek-v3.1-terminus:exacto', // generateObject calls (structured)
-  classifier:  'deepseek/deepseek-v3.2',          // news/nft/meme classification
-  fast:        'deepseek/deepseek-v4-flash',       // cheapest + fastest (MiroFish boost LLM)
-  reasoner_ds: 'deepseek/deepseek-r1-0528',       // deep math + crypto reasoning
+  analyst_pro: 'deepseek/deepseek-v4-pro',        // Prediction aggregator — 1M ctx + reasoning, $1.77/$3.53
+  reasoner_ds: 'deepseek/deepseek-r1-0528',       // Market Microstructure analyst — pure reasoning
+  fast:        'deepseek/deepseek-v4-flash',      // MiroFish boost LLM (parallel profile gen on VPS)
+  // legacy DeepSeek keys — retire after agent rewire (step 4)
+  analyst:     'deepseek/deepseek-v3.1-terminus',
+  exacto:      'deepseek/deepseek-v3.1-terminus:exacto',
+  classifier:  'deepseek/deepseek-v3.2',
 
   // ── xAI Grok ───────────────────────────────────────────────────────────────
-  // DGrid registers the xAI provider as "x-ai/" (dashed), NOT "xai/". Using "xai/"
-  // returns model_not_found even though /v1/models lists the model under x-ai/.
-  // Verified empirically against /v1/models on 2026-05-27.
-  grok:        'x-ai/grok-4.20-non-reasoning',    // live X/Twitter signal — primary scanner model
-  grok_think:  'x-ai/grok-4.20-reasoning',        // reasoning variant for deeper analysis
+  grok:        'x-ai/grok-4.20-non-reasoning',    // live X data — primary scanner source, cheapest Grok
+  grok_think:  'x-ai/grok-4.20-reasoning',        // KOL credibility, Contrarian analyst
+  grok_multi:  'x-ai/grok-4.20-multi-agent',      // Multi-Agent Consensus analyst — 2M ctx, parallel reasoning
 
   // ── Google ─────────────────────────────────────────────────────────────────
-  vision:      'google/gemini-2.5-pro',           // vision + long-context tasks
-  flash:       'google/gemini-3.5-flash',         // fastest Google model
+  gemini_pro:  'google/gemini-3.1-pro-preview',   // long-context analyst (30+ articles) — $2/$12, 1M ctx
+  // legacy Google keys — retire after agent rewire
+  vision:      'google/gemini-2.5-pro',
+  flash:       'google/gemini-3.5-flash',
 
   // ── OpenAI ─────────────────────────────────────────────────────────────────
-  search:      'openai/gpt-4o-search-preview',    // web search grounding
-  search_mini: 'openai/gpt-4o-mini-search-preview', // cheaper search
+  macro:       'openai/gpt-5.5',                  // Macro Analyst — 1M ctx + frontier reasoning, $5/$30
+  o3:          'openai/o3',                       // Quant analysts (Base Rate, Risk, NFT Floor, Gem) — $2/$8
+  o3_pro:      'openai/o3-pro',                   // Trade Ideas synthesis (one call/scan) — $20/$80
+  codex:       'openai/gpt-5.3-codex',            // Strategist build plans, VPS Helper — $1.75/$14
+  // legacy OpenAI keys — retire after agent rewire
+  search:      'openai/gpt-4o-search-preview',
+  search_mini: 'openai/gpt-4o-mini-search-preview',
 
   // ── Qwen ───────────────────────────────────────────────────────────────────
-  qwen_fast:   'qwen/qwen3.5-flash',              // fast Chinese LLM
+  qwen_big:    'qwen/qwen3-235b-a22b-instruct-2507', // Crypto Fundamentals analyst (multilingual) — $0.287/$1.147
+  embed:       'qwen/qwen3-embedding-8b',         // future — semantic news dedup, "similar past mints"
+  vision_cheap:'qwen/qwen2.5-vl-72b-instruct',    // future — chart screenshot / NFT image scoring — $0.03/$0.13
+  qwen_fast:   'qwen/qwen3.5-flash',              // legacy
 
-  // ── Chimera (TNG) ──────────────────────────────────────────────────────────
-  // DGrid lists tngtech/deepseek-r1t2-chimera in /v1/models but returns "no endpoints found"
-  // when called — provider is dead as of 2026-05-27. Keep the entry but it will fail at runtime.
-  chimera:     'tngtech/deepseek-r1t2-chimera',   // R1 reasoning fused with instruction tuning (currently no endpoints)
+  // ── Moonshot ───────────────────────────────────────────────────────────────
+  kimi_think:  'moonshotai/kimi-k2-thinking',     // Crowd Calibrator analyst — cheapest serious reasoner, $0.4/$1.75
+
+  // ── Meta (free tier) ───────────────────────────────────────────────────────
+  free_filter: 'meta-llama/llama-3.3-70b-instruct:free', // pre-filters, dedup, free brief tier — $0
+
+  // ── ZAI / GLM ──────────────────────────────────────────────────────────────
+  exacto_glm:  'z-ai/glm-4.6:exacto',             // primary structured-JSON parser (Grok output → typed) — $0.43/$1.75
+
+  // ── Chimera (TNG) — DEAD on DGrid as of 2026-05-27 ─────────────────────────
+  chimera:     'tngtech/deepseek-r1t2-chimera',   // no endpoints — kept for catalog completeness only
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
