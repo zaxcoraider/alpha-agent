@@ -45,8 +45,8 @@ export function Sidebar() {
           <Zap size={15} className="text-emerald-400" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold tracking-tight text-foreground">Alpha Agent</p>
-          <p className="text-[10px] text-muted-foreground">24/7 intel dashboard</p>
+          <p className="text-sm font-bold tracking-tight text-foreground">PLANTIR</p>
+          <p className="text-[10px] text-muted-foreground tracking-wider uppercase">Crypto Intel Terminal</p>
         </div>
       </div>
 
