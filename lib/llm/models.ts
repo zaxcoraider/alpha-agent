@@ -72,27 +72,118 @@ export const MODELS = {
 export type ModelKey = keyof typeof MODELS;
 export type ModelId  = (typeof MODELS)[ModelKey];
 
-// ── Per-agent model assignments ─────────────────────────────────────────────
-// Rule: use exacto variants for all generateObject calls (structured JSON output).
-// Reasoning/synthesis tasks get Opus. Live social signals use Grok.
+// ── Per-task model assignments ──────────────────────────────────────────────
+// Headline model per agent. Pipeline-stage detail (source/parse/analyze) lives
+// in SCANNER_PIPELINE; the prediction analyst pool lives in PREDICTION_ANALYSTS.
+// Step 3 rewires each agent file to consume these constants.
 export const AGENT_MODELS: Record<string, string> = {
-  // Prediction Tab
-  prediction_analyst:    MODELS.classifier,  // 10 parallel generateObject — deepseek-v3.2 confirmed working
-  prediction_aggregator: MODELS.reasoner_ds, // Chief Analyst — r1-0528 deep reasoning for synthesis
-  prediction_social:     MODELS.grok,        // live X/Twitter signal
+  // ── Prediction Tab ────────────────────────────────────
+  // prediction_analyst is the legacy single-model fallback for the old 10-analyst
+  // pool. The new tab dispatches across 12 specialist analysts — see PREDICTION_ANALYSTS.
+  prediction_analyst:    MODELS.classifier,    // legacy fallback (kept until prediction.ts rewire)
+  prediction_aggregator: MODELS.analyst_pro,   // V4 Pro — 1M ctx + reasoning, ~90% cost cut vs R1-0528
+  prediction_social:     MODELS.grok,          // Grok NR — live X data (unchanged)
 
-  // Scanners (classification — fast + cheap)
-  news:       MODELS.classifier,
-  nft:        MODELS.classifier,
-  memes:      MODELS.classifier,
-  x_events:   MODELS.classifier,
-  dev_events: MODELS.classifier,
+  // ── Scanners (headline analyzer — full pipeline in SCANNER_PIPELINE) ──────
+  news:       MODELS.balanced,    // Sonnet — News summary + categorization
+  nft:        MODELS.reasoner,    // Opus — rug detection on NFT mint contracts
+  memes:      MODELS.reasoner,    // Opus — rug detection + gem scoring
+  x_events:   MODELS.balanced,    // Sonnet — X event categorization
+  dev_events: MODELS.balanced,    // Sonnet — release / protocol-update summaries
 
-  // Alpha Ideas (synthesis across all scanners — needs best reasoning)
-  ideas:      MODELS.reasoner,
+  // ── Synthesis ─────────────────────────────────────────
+  ideas:        MODELS.reasoner,  // Opus — Build Ideas synthesis across all scanners
+  trade_ideas:  MODELS.o3_pro,    // o3 Pro — Trade Ideas (one premium call per scan cycle)
 
-  // Chat default
-  chat_default: MODELS.balanced,
+  // ── Cross-cutting roles ───────────────────────────────
+  pre_filter: MODELS.free_filter, // Llama 3.3 70B free — dedup + pre-classify before paid calls
+  parser:     MODELS.exacto_glm,  // GLM 4.6 exacto — Grok text → typed JSON
+
+  // ── Chat / Strategist ─────────────────────────────────
+  chat_default: MODELS.balanced,  // Sonnet — Chat default
+  strategist:   MODELS.codex,     // GPT-5.3 Codex — Strategist build plans + VPS Helper
+};
+
+// ── Prediction Tab: 12 specialist analysts ─────────────────────────────────
+// One call per market per analyst, picked for the analytical frame the analyst
+// represents. AGENT_MODELS.prediction_aggregator (V4 Pro) fuses the outputs.
+//
+// Budget Option B from the 18-pick plan: cheap 4-analyst pool runs on every
+// market; full 12-analyst pool runs only on the top 5 markets. Step 3 wires
+// this tiering in lib/agents/prediction.ts.
+export type AnalystRole = {
+  id:    string;
+  label: string;
+  model: string;
+  focus: string;
+};
+
+export const PREDICTION_ANALYSTS: AnalystRole[] = [
+  { id: 'macro',            label: 'Macro',                 model: MODELS.macro,       focus: 'Global econ, rates, DXY, BTC dominance — 1M ctx swallows full macro state' },
+  { id: 'base_rate',        label: 'Base Rate',             model: MODELS.o3,          focus: 'Historical base rates for similar setups' },
+  { id: 'risk_tail',        label: 'Risk & Tail',           model: MODELS.o3,          focus: 'Tail risk, max drawdown, liquidation cliffs' },
+  { id: 'nft_floor',        label: 'NFT Floor',             model: MODELS.o3,          focus: 'NFT floor dynamics, mint pressure' },
+  { id: 'memes_gem',        label: 'Memes / Gem',           model: MODELS.o3,          focus: 'Meme-coin early gem scoring' },
+  { id: 'microstructure',   label: 'Market Microstructure', model: MODELS.reasoner_ds, focus: 'Order flow, CEX/DEX volume patterns — pure reasoning' },
+  { id: 'fundamentals',     label: 'Crypto Fundamentals',   model: MODELS.qwen_big,    focus: 'On-chain metrics + multilingual coverage (Asian crypto)' },
+  { id: 'crowd_calibrator', label: 'Crowd Calibrator',      model: MODELS.kimi_think,  focus: 'Calibrates crowd consensus vs contrarian read' },
+  { id: 'consensus',        label: 'Multi-Agent Consensus', model: MODELS.grok_multi,  focus: 'Parallel reasoning across live X data (2M ctx)' },
+  { id: 'kol',              label: 'KOL Credibility',       model: MODELS.grok_think,  focus: 'KOL track-record weighted signal from X' },
+  { id: 'contrarian',       label: 'Contrarian',            model: MODELS.grok_think,  focus: 'Looks for over-extended consensus to fade' },
+  { id: 'rug_red_flags',    label: 'Rug / Red Flags',       model: MODELS.reasoner,    focus: 'Subtle rug-risk signals — Opus only (Sonnet misses these)' },
+];
+
+// 4-analyst cheap pool that runs on every market (Option B from cost plan).
+// Picked for coverage across frames: macro + quant + microstructure + crowd.
+export const PREDICTION_CHEAP_POOL: AnalystRole[] = PREDICTION_ANALYSTS.filter((a) =>
+  ['base_rate', 'risk_tail', 'microstructure', 'crowd_calibrator'].includes(a.id),
+);
+
+// ── Per-scanner pipeline models ────────────────────────────────────────────
+// Each scanner is a 4-stage pipeline:
+//   source    → live data fetch from external API (usually via Grok-NR for X data)
+//   prefilter → free dedup / pre-classify to drop garbage before paid calls
+//   parse     → Grok text → structured JSON (GLM 4.6 exacto)
+//   analyze   → per-item reasoning (Opus / Sonnet / o3 depending on scanner)
+// Step 3 rewires each lib/agents/*.ts to read from this map.
+export type ScannerPipeline = {
+  source:    string;
+  prefilter: string;
+  parse:     string;
+  analyze:   string;
+};
+
+export const SCANNER_PIPELINE: Record<string, ScannerPipeline> = {
+  memes: {
+    source:    MODELS.grok,         // live X chatter + DexScreener (DexScreener call is HTTP, not LLM)
+    prefilter: MODELS.free_filter,
+    parse:     MODELS.exacto_glm,
+    analyze:   MODELS.reasoner,     // Opus — Sonnet misses subtle rug red flags
+  },
+  nft: {
+    source:    MODELS.grok,
+    prefilter: MODELS.free_filter,
+    parse:     MODELS.exacto_glm,
+    analyze:   MODELS.reasoner,     // Opus — rug detection on mint contracts
+  },
+  x_events: {
+    source:    MODELS.grok,
+    prefilter: MODELS.free_filter,
+    parse:     MODELS.exacto_glm,
+    analyze:   MODELS.balanced,     // Sonnet — categorization workload
+  },
+  news: {
+    source:    MODELS.grok,
+    prefilter: MODELS.free_filter,
+    parse:     MODELS.exacto_glm,
+    analyze:   MODELS.balanced,
+  },
+  dev_events: {
+    source:    MODELS.grok,
+    prefilter: MODELS.free_filter,
+    parse:     MODELS.exacto_glm,
+    analyze:   MODELS.balanced,
+  },
 };
 
 // ── MiroFish VPS env recommendations ────────────────────────────────────────
