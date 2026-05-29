@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { dgridNoTemp } from '@/lib/llm/client';
+import { AGENT_MODELS } from '@/lib/llm/models';
 import { scanCTForMemes, fetchDexScreenerTrending, type RawMemeToken } from '@/lib/sources/memes';
 
 // ── Output schema ─────────────────────────────────────────────────────────────
@@ -72,9 +72,11 @@ async function analyzeToken(raw: RawMemeToken, _grokContext: string): Promise<Me
   try {
     const mcap = raw.marketCapUsd ? `$${(raw.marketCapUsd / 1_000).toFixed(0)}K` : 'unknown';
 
+    // Opus 4.7 for rug detection + gem scoring — Sonnet misses subtle red flags.
+    // dgridNoTemp because Opus rejects the temperature parameter.
     const { text } = await generateText({
-      model:       dgrid(MODELS.classifier),
-      abortSignal: AbortSignal.timeout(45_000),
+      model:       dgridNoTemp(AGENT_MODELS.memes),
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `You are a meme coin analyst. Analyze the token below and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 
 TOKEN DATA:

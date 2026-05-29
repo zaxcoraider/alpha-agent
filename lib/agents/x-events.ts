@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { AGENT_MODELS } from '@/lib/llm/models';
 import { scanXEvents, type RawXEvent } from '@/lib/sources/x-events';
 
 // ── Output schema ─────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ export type XEvent = z.infer<typeof XEventSchema>;
 async function scoreEvent(raw: RawXEvent, _grokContext: string): Promise<XEvent | null> {
   try {
     const { text } = await generateText({
-      model:       dgrid(MODELS.classifier),
+      model:       dgrid(AGENT_MODELS.x_events),
       abortSignal: AbortSignal.timeout(45_000),
       prompt: `You are a crypto market analyst. Score this X event and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 

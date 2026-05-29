@@ -73,10 +73,10 @@ Priority: tokens under $1M mcap deployed <24h ago with growing CT velocity — t
 
   if (!ctReport.trim()) return [];
 
-  // Step 2: DeepSeek parses Grok's live meme scan into structured schema
+  // Step 2: GLM 4.6 exacto parses Grok's live meme scan into structured schema
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),
+      model:       dgrid(MODELS.exacto_glm),
       schema:      GrokMemeSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),

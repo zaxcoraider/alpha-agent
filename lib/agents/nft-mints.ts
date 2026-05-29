@@ -1,7 +1,7 @@
 import { generateText } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { dgridNoTemp } from '@/lib/llm/client';
+import { AGENT_MODELS } from '@/lib/llm/models';
 import {
   scanCTForMints,
   fetchReservoirMints,
@@ -67,9 +67,11 @@ export type NFTMint = z.infer<typeof NFTMintSchema>;
 
 async function analyzeProject(raw: RawNFTProject, _grokContext: string): Promise<NFTMint | null> {
   try {
+    // Opus 4.7 for rug detection — Sonnet misses subtle red flags on mint contracts.
+    // dgridNoTemp because Opus rejects the temperature parameter.
     const { text } = await generateText({
-      model:       dgrid(MODELS.classifier),
-      abortSignal: AbortSignal.timeout(45_000),
+      model:       dgridNoTemp(AGENT_MODELS.nft),
+      abortSignal: AbortSignal.timeout(60_000),
       prompt: `You are an NFT alpha analyst. Analyze this mint and reply with ONLY a valid JSON object. No markdown fences, no explanation.
 
 NFT DATA:

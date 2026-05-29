@@ -74,10 +74,10 @@ Prioritize projects with fewer than 50 mentions that are growing fast — those 
 
   if (!ctReport.trim()) return [];
 
-  // Step 2: DeepSeek parses Grok's live report into structured schema
+  // Step 2: GLM 4.6 exacto parses Grok's live report into structured schema
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),
+      model:       dgrid(MODELS.exacto_glm),
       schema:      GrokNFTSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),

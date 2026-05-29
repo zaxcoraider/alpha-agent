@@ -66,10 +66,11 @@ Be specific: use real handles, real tickers, real dates, real engagement numbers
 
   if (!ctReport.trim()) return [];
 
-  // Step 2: DeepSeek parses Grok's real CT report into structured schema
+  // Step 2: GLM 4.6 exacto parses Grok's real CT report into structured schema
+  // (exacto is fine-tuned for structured JSON, much higher fidelity than DeepSeek v3.2)
   try {
     const { object } = await generateObject({
-      model:       dgrid(MODELS.classifier),
+      model:       dgrid(MODELS.exacto_glm),
       schema:      GrokXEventSchema,
       mode:        'json',
       abortSignal: AbortSignal.timeout(60_000),
