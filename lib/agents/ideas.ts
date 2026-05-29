@@ -1,7 +1,7 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { dgridNoTemp } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { MODELS, AGENT_MODELS } from '@/lib/llm/models';
 
 // ── Output schemas ────────────────────────────────────────────────────────────
 
@@ -81,10 +81,15 @@ ${CONVICTION_SCALE}`,
 // ── Trade Ideas synthesis ────────────────────────────────────────────────────
 
 export async function runTradeIdeasSynthesis(contextSummary: string): Promise<{ ideas: Idea[] }> {
+  // o3-pro for Trade Ideas — the single most consequential daily decision in
+  // the dashboard ("what should I trade"). o3-pro is a reasoning model and
+  // does NOT accept temperature, hence dgridNoTemp. Latency can exceed Vercel
+  // Hobby's 60s cap; on Hobby this call may time out and the section will
+  // gracefully render empty (caller wraps in .catch).
   const { object } = await generateObject({
-    model:       dgridNoTemp(MODELS.reasoner),
+    model:       dgridNoTemp(AGENT_MODELS.trade_ideas),
     schema:      SectionBatchSchema,
-    abortSignal: AbortSignal.timeout(55_000),
+    abortSignal: AbortSignal.timeout(110_000),
     prompt: `You are the Alpha Synthesizer — a senior crypto strategist. Read the intelligence snapshot and generate Trade Ideas only.
 
 INTELLIGENCE SNAPSHOT (last 24h):
