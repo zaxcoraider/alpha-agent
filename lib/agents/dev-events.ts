@@ -1,7 +1,7 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { dgrid } from '@/lib/llm/client';
-import { MODELS } from '@/lib/llm/models';
+import { AGENT_MODELS } from '@/lib/llm/models';
 import { discoverFromGrok, discoverFromTavily, type RawOpportunity } from '@/lib/sources/dev-events';
 
 // ── Output schema ─────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ async function processOpportunity(raw: RawOpportunity): Promise<ProcessedOpportu
   try {
     const today = new Date().toISOString().slice(0, 10);
     const { object } = await generateObject({
-      model:       dgrid(MODELS.balanced),
+      model:       dgrid(AGENT_MODELS.dev_events),
       schema:      OpportunitySchema,
       abortSignal: AbortSignal.timeout(20_000),
       prompt: `Process this developer opportunity into structured data. Today is ${today}.
@@ -91,10 +91,16 @@ export async function runDevEventsScan(): Promise<{
     if (!seen.has(key)) { seen.add(key); unique.push(r); }
   }
 
+  // Free Llama semantic dedup: same hackathon often listed under different titles
+  // (e.g. "ETHGlobal SF 2026" vs "ETHGlobal San Francisco Hackathon"). Cheap call,
+  // fails open so we never lose data if free tier is rate-limited.
+  const deduped = await llamaDedup(unique);
+  console.log(`[dev-events] dedup: ${unique.length} → ${deduped.length} unique opportunities`);
+
   // Process in batches of 5
   const processed: ProcessedOpportunity[] = [];
-  for (let i = 0; i < unique.length; i += 5) {
-    const batch = unique.slice(i, i + 5);
+  for (let i = 0; i < deduped.length; i += 5) {
+    const batch = deduped.slice(i, i + 5);
     const results = await Promise.allSettled(batch.map(processOpportunity));
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value && r.value.status !== 'ended') {
@@ -106,4 +112,38 @@ export async function runDevEventsScan(): Promise<{
   processed.sort((a, b) => b.matchScore - a.matchScore);
 
   return { opportunities: processed, scanned: all.length };
+}
+
+// ─── Free Llama semantic dedup ────────────────────────────────────────────────
+
+const DedupSchema = z.object({
+  keepIndexes: z.array(z.number().int().min(1)),
+});
+
+async function llamaDedup(items: RawOpportunity[]): Promise<RawOpportunity[]> {
+  if (items.length <= 8) return items;
+
+  const numbered = items
+    .slice(0, 50)
+    .map((r, i) => `${i + 1}. [${r.type}] ${r.title} — ${r.organizer ?? '?'}`)
+    .join('\n');
+
+  try {
+    const { object } = await generateObject({
+      model:       dgrid(AGENT_MODELS.pre_filter),
+      schema:      DedupSchema,
+      abortSignal: AbortSignal.timeout(20_000),
+      prompt: `Below are crypto/developer opportunities. Many are duplicates listed under slightly different titles (e.g. "ETHGlobal SF 2026" vs "ETHGlobal San Francisco Hackathon").
+
+Return the 1-based indexes of UNIQUE opportunities — for each duplicate set, keep the one with the cleanest/most authoritative title.
+
+${numbered}`,
+    });
+    const keep = new Set(object.keepIndexes);
+    const kept = items.slice(0, 50).filter((_, i) => keep.has(i + 1));
+    return [...kept, ...items.slice(50)];
+  } catch (err) {
+    console.warn('[dev-events] Llama dedup failed, using all items:', (err as Error).message);
+    return items;
+  }
 }
