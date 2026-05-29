@@ -1,7 +1,12 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid } from '@/lib/llm/client';
-import { AGENT_MODELS } from '@/lib/llm/models';
+import { dgrid, dgridNoTemp } from '@/lib/llm/client';
+import {
+  AGENT_MODELS,
+  PREDICTION_ANALYSTS,
+  PREDICTION_CHEAP_POOL,
+  type AnalystRole,
+} from '@/lib/llm/models';
 import { fetchActiveMarkets, type ParsedMarket } from '@/lib/sources/polymarket';
 import { fetchKalshiMarkets } from '@/lib/sources/kalshi';
 import { buildPredictionContext, formatContextBlock } from '@/lib/sources/prediction-context';
@@ -62,66 +67,50 @@ const AggregatorSchema = z.object({
   reasoning: z.string(),
 });
 
-// ─── 10-analyst ensemble ──────────────────────────────────────────────────────
+// ─── 12-analyst ensemble ──────────────────────────────────────────────────────
+// Analyst pool + per-frame model selection lives in lib/llm/models.ts as
+// PREDICTION_ANALYSTS / PREDICTION_CHEAP_POOL. Each analyst has its own
+// specialist model picked for the frame they represent (Opus for rug detection,
+// o3 for quant frames, R1 for microstructure reasoning, Grok variants for live
+// X data, etc).
+//
+// Rich lens prompts (the analyst's "voice") stay here keyed by analyst.id so
+// the prompts can evolve independently of model selection.
 
-const ANALYST_ROLES = [
-  {
-    role: 'Macro Analyst',
-    lens: 'Focus on macro-economic trends, policy cycles, interest rates, and structural forces. How do the current macro regime and global risk sentiment affect this outcome? Calibrate against historical crowd accuracy on macro-driven events.',
-  },
-  {
-    role: 'Base Rate Analyst',
-    lens: 'Ignore all narrative. Focus purely on historical base rates: How often do events of this exact type resolve YES? What is the right reference class? Anchor hard to the base rate before any adjustment.',
-  },
-  {
-    role: 'Contrarian Analyst',
-    lens: 'Steel-man the case AGAINST the current market consensus. What is the crowd missing? What overlooked factor, tail risk, or contrary evidence shifts the probability significantly away from the market price?',
-  },
-  {
-    role: 'News Catalyst Analyst',
-    lens: 'Use the live news context provided. Identify specific upcoming events, scheduled announcements, regulatory decisions, or structural triggers that could shift the resolution before the deadline. Weight catalysts by proximity and magnitude.',
-  },
-  {
-    role: 'Market Microstructure Analyst',
-    lens: 'Analyze the market mechanics: volume trends, liquidity depth, bid-ask spread, recent price movement velocity. Is this market efficiently priced or are there signs of informed trading, thin liquidity distortion, or late-money manipulation?',
-  },
-  {
-    role: 'Social Sentiment Analyst',
-    lens: 'Use the Reddit and Twitter/X signals provided. Assess crowd psychology: Are retail participants herding? Is there a narrative dominating that the fundamentals don\'t support? What is the social volume trend and sentiment direction vs. 1 week ago?',
-  },
-  {
-    role: 'Political & Regulatory Analyst',
-    lens: 'Assess political dynamics, regulatory environment, and institutional behavior. Focus on power structures, incentives of key decision-makers, legislative timelines, and legal/compliance precedents that could force a specific resolution.',
-  },
-  {
-    role: 'Risk & Tail Analyst',
-    lens: 'Focus exclusively on downside risk and black-swan scenarios. What low-probability, high-impact events could force an unexpected resolution? Assign probability mass to these tails explicitly. Do NOT anchor to the base case.',
-  },
-  {
-    role: 'Crypto Fundamentals Analyst',
-    lens: 'Assess on-chain and protocol fundamentals: TVL trends, developer activity, token unlock schedules, exchange inflow/outflow signals, whale wallet movements, and protocol revenue. Ground your estimate in verifiable on-chain data signals from the news context.',
-  },
-  {
-    role: 'Quantitative Momentum Analyst',
-    lens: 'Focus on price momentum, volume patterns, and statistical signals. What does the recent market price trajectory imply about resolution probability? Apply quantitative thinking: trend strength, mean-reversion probability, and volatility-adjusted edge estimation.',
-  },
-] as const;
+const ANALYST_LENS: Record<string, string> = {
+  macro:            'Focus on macro-economic trends, policy cycles, interest rates, DXY, BTC dominance, and structural forces. How does the current macro regime affect this outcome? Use the 1M-context window to swallow the full macro state, not just the latest headline.',
+  base_rate:        'Ignore all narrative. Focus purely on historical base rates: how often do events of this exact reference class resolve YES? Anchor hard to the base rate before any adjustment.',
+  risk_tail:        'Focus exclusively on downside risk and black-swan scenarios. What low-probability, high-impact events could force an unexpected resolution? Assign probability mass to these tails explicitly. Do NOT anchor to the base case.',
+  nft_floor:        'Focus on NFT floor dynamics, mint pressure, and collector behavior. If this market touches NFT pricing, supply, or mint outcomes, your read dominates. Otherwise contribute a calibrated "low-confidence" estimate.',
+  memes_gem:        'Focus on early meme-coin gem signals: CT velocity, KOL accumulation, narrative ignition, and rug-vs-real divergence. Identify early-stage signal that a token thesis is forming.',
+  microstructure:   'Analyze market mechanics: volume trends, liquidity depth, bid-ask spread, recent velocity. Is this market efficiently priced or are there signs of informed trading, thin liquidity distortion, or late-money manipulation?',
+  fundamentals:     'Assess on-chain and protocol fundamentals: TVL trends, developer activity, token unlock schedules, exchange inflow/outflow, whale movements, and protocol revenue. Cover Asian crypto coverage too — multilingual sources matter.',
+  crowd_calibrator: 'Calibrate the crowd vs the smart money. Use the Reddit + X signals to assess whether retail is herding ahead of fundamentals, or whether smart-money positioning is quietly diverging from the consensus narrative.',
+  consensus:        'Run a parallel multi-agent search across live X data. What do the most-engaged, most-credible CT accounts collectively imply about this outcome? Weight by author credibility, not raw engagement.',
+  kol:              'Assess KOL credibility on this specific topic. Which named KOLs have historically been right on questions of this reference class? Weight their current take by that track record — ignore unverified accounts entirely.',
+  contrarian:       'Steel-man the case AGAINST the current market consensus. Use live X data to find what the crowd is missing: overlooked factor, tail risk, late-cycle signal that flips this 20%+ away from the market price.',
+  rug_red_flags:    'Hunt for subtle rug-risk signals that Sonnet would miss. Examine team doxx state, contract verification, holder concentration, liquidity lock status, and historical patterns of dev wallets. If any flag fires, lower yourProb sharply.',
+};
 
 // ─── Run one analyst ──────────────────────────────────────────────────────────
+// Each analyst gets its own model from PREDICTION_ANALYSTS. We use dgridNoTemp
+// universally because many of the new specialists (Opus, o3, GPT-5.5, R1,
+// Kimi K2 Thinking) are reasoning models that reject the temperature parameter.
 
 async function runAnalyst(
   market: ParsedMarket,
-  role: string,
-  lens: string,
+  analyst: AnalystRole,
   contextBlock: string,
+  poolSize: number,
 ): Promise<AnalystOpinion | null> {
+  const lens = ANALYST_LENS[analyst.id] ?? analyst.focus;
   try {
     const { object } = await generateObject({
-      model: dgrid(AGENT_MODELS.prediction_analyst),
-      schema: AnalystSchema,
-      mode: 'json',
-      abortSignal: AbortSignal.timeout(60_000),
-      prompt: `You are the ${role} in a 10-analyst prediction market ensemble.
+      model:       dgridNoTemp(analyst.model),
+      schema:      AnalystSchema,
+      mode:        'json',
+      abortSignal: AbortSignal.timeout(90_000),  // reasoning models (o3, R1, Kimi) can take 60s+
+      prompt: `You are the ${analyst.label} analyst in a ${poolSize}-analyst prediction market ensemble.
 
 MARKET:
 - Question: ${market.question}
@@ -142,9 +131,9 @@ Output:
 - evidence: 2-3 specific bullet points supporting your estimate`,
     });
 
-    return { ...object, role };
+    return { ...object, role: analyst.label };
   } catch (err) {
-    console.error(`[analyst:${role}] failed:`, err);
+    console.error(`[analyst:${analyst.id}] failed:`, err);
     return null;
   }
 }
@@ -227,11 +216,14 @@ const SIM_ROUNDS = 30;
 
 // ─── Full ensemble for one market ────────────────────────────────────────────
 
+export type AnalystPool = 'cheap' | 'full';
+
 export async function analyseMarket(
   market: ParsedMarket,
   miroFish: MiroFishResult | null = null,
   prebuiltContext?: string,  // pass when runPredictionScan already fetched context for MiroFish
   mode: PredictMode = 'both',
+  pool: AnalystPool = 'cheap',  // Option B tiering: cheap default, full on top markets only
 ): Promise<Prediction> {
   // Step 1: fetch live context, or reuse pre-built to avoid double-fetch
   let contextBlock = prebuiltContext ?? '';
@@ -245,8 +237,9 @@ export async function analyseMarket(
   // Step 2: run analysts (skip when mirofish_only)
   let opinions: AnalystOpinion[] = [];
   if (mode !== 'mirofish_only') {
+    const roster = pool === 'full' ? PREDICTION_ANALYSTS : PREDICTION_CHEAP_POOL;
     const analystResults = await Promise.allSettled(
-      ANALYST_ROLES.map((a) => runAnalyst(market, a.role, a.lens, contextBlock)),
+      roster.map((a) => runAnalyst(market, a, contextBlock, roster.length)),
     );
     opinions = analystResults
       .filter(
@@ -324,27 +317,37 @@ export async function runPredictionScan(): Promise<{
 
   const markets = [...polyMarkets, ...kalshiMarkets].slice(0, 45);
 
-  // Top 3 markets get the full MiroFish swarm pipeline (runs sequentially — each takes ~15-20 min)
-  // Remaining markets get the 10-analyst ensemble only
+  // Option B budget tiering:
+  //   markets [0..2]   → full 12-analyst pool + MiroFish swarm  (highest stakes)
+  //   markets [3..4]   → full 12-analyst pool, no MiroFish      (top non-MiroFish)
+  //   markets [5..44]  → cheap 4-analyst pool only              (volume coverage)
   const miroFishMarkets = markets.slice(0, 3);
-  const rest            = markets.slice(3);
+  const fullPoolRest    = markets.slice(3, 5);
+  const cheapPoolRest   = markets.slice(5);
 
   const predictions: Prediction[] = [];
 
   // Run MiroFish sequentially for top 3 (parallel would overwhelm VPS + Zep)
   for (const m of miroFishMarkets) {
-    // Build context first so we can pass it to both MiroFish and the analyst ensemble
     const ctx          = await buildPredictionContext(m.question).catch(() => null);
     const contextBlock = ctx ? formatContextBlock(ctx) : '━━━ LIVE MARKET INTELLIGENCE ━━━\nNo context available.';
     const miroFish     = await runMiroFishAnalysis(m, contextBlock).catch(() => null);
-    const r            = await analyseMarket(m, miroFish, contextBlock).catch(() => null);
+    const r            = await analyseMarket(m, miroFish, contextBlock, 'both', 'full').catch(() => null);
     if (r) predictions.push(r);
   }
 
-  // Remaining in batches of 5
-  for (let i = 0; i < rest.length; i += 5) {
-    const batch   = rest.slice(i, i + 5);
-    const results = await Promise.allSettled(batch.map((m) => analyseMarket(m, null)));
+  // Markets 4-5: full pool, no MiroFish
+  const fullRestResults = await Promise.allSettled(
+    fullPoolRest.map((m) => analyseMarket(m, null, undefined, 'both', 'full')),
+  );
+  for (const r of fullRestResults) {
+    if (r.status === 'fulfilled') predictions.push(r.value);
+  }
+
+  // Cheap pool: batches of 5 to keep concurrency reasonable
+  for (let i = 0; i < cheapPoolRest.length; i += 5) {
+    const batch   = cheapPoolRest.slice(i, i + 5);
+    const results = await Promise.allSettled(batch.map((m) => analyseMarket(m, null, undefined, 'both', 'cheap')));
     for (const r of results) {
       if (r.status === 'fulfilled') predictions.push(r.value);
     }
