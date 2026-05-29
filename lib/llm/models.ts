@@ -19,16 +19,12 @@ export const MODELS = {
   // ── Anthropic ──────────────────────────────────────────────────────────────
   reasoner:    'anthropic/claude-opus-4.7',       // synthesis, rug detection, Build Ideas, alpha calls
   balanced:    'anthropic/claude-sonnet-4.6',     // Dev Events, X summaries, Chat default — 1M ctx
-  fast_claude: 'anthropic/claude-haiku-4.5',      // legacy — Llama free covers budget end
 
   // ── DeepSeek ───────────────────────────────────────────────────────────────
   analyst_pro: 'deepseek/deepseek-v4-pro',        // Prediction aggregator — 1M ctx + reasoning, $1.77/$3.53
   reasoner_ds: 'deepseek/deepseek-r1-0528',       // Market Microstructure analyst — pure reasoning
   fast:        'deepseek/deepseek-v4-flash',      // MiroFish boost LLM (parallel profile gen on VPS)
-  // legacy DeepSeek keys — retire after agent rewire (step 4)
-  analyst:     'deepseek/deepseek-v3.1-terminus',
-  exacto:      'deepseek/deepseek-v3.1-terminus:exacto',
-  classifier:  'deepseek/deepseek-v3.2',
+  classifier:  'deepseek/deepseek-v3.2',          // MiroFish structured output + scan-debug only
 
   // ── xAI Grok ───────────────────────────────────────────────────────────────
   grok:        'x-ai/grok-4.20-non-reasoning',    // live X data — primary scanner source, cheapest Grok
@@ -37,24 +33,17 @@ export const MODELS = {
 
   // ── Google ─────────────────────────────────────────────────────────────────
   gemini_pro:  'google/gemini-3.1-pro-preview',   // long-context analyst (30+ articles) — $2/$12, 1M ctx
-  // legacy Google keys — retire after agent rewire
-  vision:      'google/gemini-2.5-pro',
-  flash:       'google/gemini-3.5-flash',
 
   // ── OpenAI ─────────────────────────────────────────────────────────────────
   macro:       'openai/gpt-5.5',                  // Macro Analyst — 1M ctx + frontier reasoning, $5/$30
   o3:          'openai/o3',                       // Quant analysts (Base Rate, Risk, NFT Floor, Gem) — $2/$8
   o3_pro:      'openai/o3-pro',                   // Trade Ideas synthesis (one call/scan) — $20/$80
   codex:       'openai/gpt-5.3-codex',            // Strategist build plans, VPS Helper — $1.75/$14
-  // legacy OpenAI keys — retire after agent rewire
-  search:      'openai/gpt-4o-search-preview',
-  search_mini: 'openai/gpt-4o-mini-search-preview',
 
   // ── Qwen ───────────────────────────────────────────────────────────────────
   qwen_big:    'qwen/qwen3-235b-a22b-instruct-2507', // Crypto Fundamentals analyst (multilingual) — $0.287/$1.147
   embed:       'qwen/qwen3-embedding-8b',         // future — semantic news dedup, "similar past mints"
   vision_cheap:'qwen/qwen2.5-vl-72b-instruct',    // future — chart screenshot / NFT image scoring — $0.03/$0.13
-  qwen_fast:   'qwen/qwen3.5-flash',              // legacy
 
   // ── Moonshot ───────────────────────────────────────────────────────────────
   kimi_think:  'moonshotai/kimi-k2-thinking',     // Crowd Calibrator analyst — cheapest serious reasoner, $0.4/$1.75
@@ -64,9 +53,6 @@ export const MODELS = {
 
   // ── ZAI / GLM ──────────────────────────────────────────────────────────────
   exacto_glm:  'z-ai/glm-4.6:exacto',             // primary structured-JSON parser (Grok output → typed) — $0.43/$1.75
-
-  // ── Chimera (TNG) — DEAD on DGrid as of 2026-05-27 ─────────────────────────
-  chimera:     'tngtech/deepseek-r1t2-chimera',   // no endpoints — kept for catalog completeness only
 } as const;
 
 export type ModelKey = keyof typeof MODELS;
@@ -78,11 +64,10 @@ export type ModelId  = (typeof MODELS)[ModelKey];
 // Step 3 rewires each agent file to consume these constants.
 export const AGENT_MODELS: Record<string, string> = {
   // ── Prediction Tab ────────────────────────────────────
-  // prediction_analyst is the legacy single-model fallback for the old 10-analyst
-  // pool. The new tab dispatches across 12 specialist analysts — see PREDICTION_ANALYSTS.
-  prediction_analyst:    MODELS.classifier,    // legacy fallback (kept until prediction.ts rewire)
+  // The 12-specialist analyst pool lives in PREDICTION_ANALYSTS — each analyst
+  // has its own model. AGENT_MODELS only carries the cross-cutting roles below.
   prediction_aggregator: MODELS.analyst_pro,   // V4 Pro — 1M ctx + reasoning, ~90% cost cut vs R1-0528
-  prediction_social:     MODELS.grok,          // Grok NR — live X data (unchanged)
+  prediction_social:     MODELS.grok,          // Grok NR — live X data
 
   // ── Scanners (headline analyzer — full pipeline in SCANNER_PIPELINE) ──────
   news:       MODELS.balanced,    // Sonnet — News summary + categorization
@@ -216,12 +201,16 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
     key:      'openai',
     badge:    'text-emerald-400',
     models: [
-      { id: 'openai/gpt-5-pro',              label: 'GPT-5 Pro',          desc: 'Most capable GPT-5' },
-      { id: 'openai/gpt-5',                  label: 'GPT-5',              desc: 'Latest GPT-5' },
-      { id: 'openai/gpt-5.1-chat',           label: 'GPT-5.1',            desc: 'Next GPT-5 generation' },
-      { id: 'openai/gpt-5.2-pro',            label: 'GPT-5.2 Pro',        desc: 'Advanced GPT-5.2' },
-      { id: 'openai/o3-pro',                 label: 'o3 Pro',             desc: 'Best reasoning model' },
-      { id: 'openai/o3',                     label: 'o3',                 desc: 'Strong reasoning' },
+      { id: 'openai/gpt-5.5-pro',            label: 'GPT-5.5 Pro',        desc: 'Maximum reasoning, frontier' },
+      { id: 'openai/gpt-5.5',                label: 'GPT-5.5',            desc: 'Macro Analyst — 1M ctx + frontier reasoning' },
+      { id: 'openai/gpt-5.3-codex',          label: 'GPT-5.3 Codex',      desc: 'Best agentic coder — Strategist default' },
+      { id: 'openai/gpt-5.3-chat',           label: 'GPT-5.3 Chat',       desc: 'GPT-5.3 conversational' },
+      { id: 'openai/gpt-5-pro',              label: 'GPT-5 Pro',          desc: 'Previous flagship GPT-5' },
+      { id: 'openai/gpt-5',                  label: 'GPT-5',              desc: 'Base GPT-5' },
+      { id: 'openai/gpt-5.1-chat',           label: 'GPT-5.1',            desc: 'GPT-5.1 chat' },
+      { id: 'openai/gpt-5.2-pro',            label: 'GPT-5.2 Pro',        desc: 'GPT-5.2 advanced' },
+      { id: 'openai/o3-pro',                 label: 'o3 Pro',             desc: 'Trade Ideas synthesis — daily decision' },
+      { id: 'openai/o3',                     label: 'o3',                 desc: 'Quant analyst — sweet spot reasoning' },
       { id: 'openai/o3-deep-research',       label: 'o3 Deep Research',   desc: 'Extended research mode' },
       { id: 'openai/o4-mini-high',           label: 'o4 Mini High',       desc: 'Fast reasoning' },
       { id: 'openai/o4-mini',                label: 'o4 Mini',            desc: 'Cheap reasoning' },
@@ -230,6 +219,14 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
       { id: 'openai/gpt-4.1',                label: 'GPT-4.1',            desc: 'Balanced' },
       { id: 'openai/gpt-4.1-mini',           label: 'GPT-4.1 Mini',       desc: 'Fast + cheap' },
       { id: 'openai/gpt-4o-search-preview',  label: 'GPT-4o Search',      desc: 'Web search grounded' },
+    ],
+  },
+  {
+    provider: 'Meta',
+    key:      'meta',
+    badge:    'text-sky-400',
+    models: [
+      { id: 'meta-llama/llama-3.3-70b-instruct:free', label: 'Llama 3.3 70B (Free)', desc: 'Pre-filter + dedup tier — $0 (rate-limited)' },
     ],
   },
   {
@@ -346,10 +343,10 @@ export const PROVIDER_GROUPS: ProviderGroup[] = [
 // Flat list of all chat models (for type safety and model picker validation)
 export const ALL_CHAT_MODELS = PROVIDER_GROUPS.flatMap((g) => g.models);
 
-// Legacy list kept for backward compat
+// Legacy quick-pick list kept for backward compat (chat picker dropdown shortcuts).
 export const CHAT_MODEL_OPTIONS = [
-  { id: MODELS.balanced,   label: 'Claude Sonnet 4.6' },
-  { id: MODELS.reasoner,   label: 'Claude Opus 4.7' },
-  { id: MODELS.grok,       label: 'Grok 4.20' },
-  { id: MODELS.classifier, label: 'DeepSeek V3.2' },
+  { id: MODELS.balanced,    label: 'Claude Sonnet 4.6' },
+  { id: MODELS.reasoner,    label: 'Claude Opus 4.7' },
+  { id: MODELS.grok,        label: 'Grok 4.20' },
+  { id: MODELS.analyst_pro, label: 'DeepSeek V4 Pro' },
 ];
