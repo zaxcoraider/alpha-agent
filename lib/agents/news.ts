@@ -6,6 +6,11 @@ import { fetchRssFeeds } from '@/lib/sources/rss';
 import { fetchCryptoPanicNews } from '@/lib/sources/cryptopanic';
 import type { RssFeedItem } from '@/lib/sources/rss';
 
+// Llama free tier rate-limits aggressively; cap pre-filter input to keep one call under the limit.
+const PREFILTER_MAX_INPUT = 60;
+// Keep ~40% of raw items for paid classification (cost plan target: ~60% reduction).
+const PREFILTER_KEEP = 24;
+
 // ─── Classification schema ────────────────────────────────────────────────────
 
 export const NewsClassificationSchema = z.object({
@@ -57,6 +62,55 @@ Rules:
   return { ...raw, ...object };
 }
 
+// ─── Free pre-filter: Llama 3.3 70B picks the top-N signal items ──────────────
+// One free LLM call ranks the batch before any paid classifier runs.
+// Fails open: if rate-limited or errored, we fall back to processing all items.
+
+const PreFilterSchema = z.object({
+  keepIndexes: z.array(z.number().int().min(1)).max(PREFILTER_KEEP * 2),
+});
+
+async function preFilterNews(items: RssFeedItem[]): Promise<RssFeedItem[]> {
+  if (items.length <= PREFILTER_KEEP) return items;
+
+  // Truncate input to keep the free-tier call cheap and within context.
+  const input = items.slice(0, PREFILTER_MAX_INPUT);
+  const numbered = input
+    .map((it, i) => `${i + 1}. [${it.source}] ${it.title}`)
+    .join('\n');
+
+  try {
+    const { object } = await generateObject({
+      model:       dgrid(AGENT_MODELS.pre_filter),
+      schema:      PreFilterSchema,
+      abortSignal: AbortSignal.timeout(20_000),
+      prompt: `You are pre-filtering crypto news for a multi-chain developer (Solana, Ethereum, Arbitrum, Base, Polygon, Optimism).
+
+From the headlines below, return the indexes (1-based) of the ${PREFILTER_KEEP} HIGHEST-signal items a crypto dev should read today.
+
+Drop:
+- generic price-action recaps ("X is up 5%")
+- listicles / clickbait
+- duplicate coverage of the same event (keep the most authoritative source)
+- non-crypto items that slipped through
+
+Keep:
+- protocol updates, hacks, regulation, funding, infra/tooling launches
+- chain-specific news that matters to a builder
+
+Headlines:
+${numbered}`,
+    });
+    const keep = new Set(object.keepIndexes);
+    const filtered = input.filter((_, i) => keep.has(i + 1));
+    // Append anything beyond PREFILTER_MAX_INPUT untouched (fail-open for tail items).
+    return [...filtered, ...items.slice(PREFILTER_MAX_INPUT)];
+  } catch (err) {
+    console.warn('[news] pre-filter failed, processing all items:', (err as Error).message);
+    return items;
+  }
+}
+
 // ─── Run full news scan ───────────────────────────────────────────────────────
 
 export async function runNewsScan(): Promise<{
@@ -79,10 +133,14 @@ export async function runNewsScan(): Promise<{
     }
   }
 
-  // Classify in batches of 5 (DeepSeek is fast enough)
+  // Free pre-filter step before paid Sonnet classifier — cuts paid load by ~60%.
+  const filtered = await preFilterNews(raw);
+  console.log(`[news] pre-filter: ${raw.length} → ${filtered.length} items for Sonnet classify`);
+
+  // Classify in batches of 5
   const items: NewsItem[] = [];
-  for (let i = 0; i < raw.length; i += 5) {
-    const batch = raw.slice(i, i + 5);
+  for (let i = 0; i < filtered.length; i += 5) {
+    const batch = filtered.slice(i, i + 5);
     const results = await Promise.allSettled(batch.map(classifyNewsItem));
     for (const r of results) {
       if (r.status === 'fulfilled') items.push(r.value);
