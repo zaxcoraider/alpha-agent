@@ -8,7 +8,7 @@ import { eq } from 'drizzle-orm';
 export const newsScan = inngest.createFunction(
   { id: 'news-scan', name: 'News Scanner' },
   [
-    { cron: '0/30 * * * *' },      // every 30 minutes
+    { cron: '0 */4 * * *' },       // every 4 hours (budget tune; was 0/30m)
     { event: 'agent/news.run' },    // manual trigger
   ],
   async ({ step }) => {

@@ -17,7 +17,7 @@ const CHAIN_MAP: Record<string, DbChain> = {
 export const nftMintsScan = inngest.createFunction(
   { id: 'nft-mints-scan', name: 'NFT Mints Scanner' },
   [
-    { cron: '*/15 * * * *' },         // every 15 minutes
+    { cron: '0 */4 * * *' },          // every 4 hours (budget tune; was */15m)
     { event: 'agent/nft-mints.run' }, // manual trigger
   ],
   async ({ step }) => {

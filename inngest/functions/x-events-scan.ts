@@ -26,7 +26,7 @@ const TYPE_EMOJI: Record<string, string> = {
 export const xEventsScan = inngest.createFunction(
   { id: 'x-events-scan', name: 'X Events Scanner' },
   [
-    { cron: '0 * * * *' },            // every hour
+    { cron: '0 */2 * * *' },          // every 2 hours (budget tune; was hourly)
     { event: 'agent/x-events.run' },  // manual trigger
   ],
   async ({ step }) => {

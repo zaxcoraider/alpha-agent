@@ -22,7 +22,7 @@ function toDbChains(chains: string[]): DbChain[] {
 export const devEventsScan = inngest.createFunction(
   { id: 'dev-events-scan', name: 'Dev Events Scanner' },
   [
-    { cron: '0 */2 * * *' },             // every 2 hours
+    { cron: '0 */8 * * *' },             // every 8 hours (budget tune; was 2h)
     { event: 'agent/dev-events.run' },   // manual trigger
   ],
   async ({ step }) => {

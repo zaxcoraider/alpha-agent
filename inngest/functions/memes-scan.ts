@@ -16,7 +16,7 @@ const CHAIN_MAP: Record<string, DbChain> = {
 export const memesScan = inngest.createFunction(
   { id: 'memes-scan', name: 'Meme Radar Scanner' },
   [
-    { cron: '*/30 * * * *' },        // every 30 minutes
+    { cron: '0 */2 * * *' },         // every 2 hours (budget tune; was */30m)
     { event: 'agent/memes.run' },    // manual trigger
   ],
   async ({ step }) => {
