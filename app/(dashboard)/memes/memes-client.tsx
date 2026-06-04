@@ -74,29 +74,15 @@ function fmt(n: number): string {
 }
 
 function Chip({
-  label, active, color = 'emerald', onClick,
+  label, active, onClick,
 }: { label: string; active: boolean; color?: string; onClick: () => void }) {
-  const activeCls: Record<string, string> = {
-    emerald: 'bg-emerald-600 border-emerald-500 text-white',
-    sky:     'bg-sky-600 border-sky-500 text-white',
-    orange:  'bg-orange-600 border-orange-500 text-white',
-    violet:  'bg-violet-600 border-violet-500 text-white',
-    rose:    'bg-rose-600 border-rose-500 text-white',
-  };
-  const hoverCls: Record<string, string> = {
-    emerald: 'hover:border-emerald-500/50',
-    sky:     'hover:border-sky-500/40',
-    orange:  'hover:border-orange-500/40',
-    violet:  'hover:border-violet-500/40',
-    rose:    'hover:border-rose-500/40',
-  };
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+      className={`shrink-0 px-2.5 py-1 rounded-sm text-[11px] font-mono uppercase tracking-wide border transition-colors ${
         active
-          ? (activeCls[color] ?? activeCls.emerald)
-          : `bg-card border-border text-muted-foreground ${hoverCls[color] ?? hoverCls.emerald}`
+          ? 'bg-signal/15 text-signal border-signal/40'
+          : 'bg-card border-border text-muted-foreground hover:border-signal/30 hover:text-foreground'
       }`}
     >
       {label}
@@ -107,19 +93,19 @@ function Chip({
 function GemBar({ score }: { score: number }) {
   const pct   = Math.min(100, Math.max(0, score));
   const color =
-    pct >= 75 ? 'bg-emerald-400' :
-    pct >= 55 ? 'bg-yellow-400'  :
-    pct >= 35 ? 'bg-orange-400'  :
-                'bg-slate-500';
+    pct >= 75 ? 'bg-signal' :
+    pct >= 55 ? 'bg-risk-medium'  :
+    pct >= 35 ? 'bg-risk-high'  :
+                'bg-muted-foreground/50';
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 rounded-full bg-white/10">
+      <div className="h-1.5 flex-1 rounded-full bg-muted">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className={`text-xs font-bold tabular-nums ${
-        pct >= 75 ? 'text-emerald-400' :
-        pct >= 55 ? 'text-yellow-400'  :
-        pct >= 35 ? 'text-orange-400'  : 'text-slate-400'
+      <span className={`text-xs font-mono font-bold tabular-nums ${
+        pct >= 75 ? 'text-signal' :
+        pct >= 55 ? 'text-risk-medium'  :
+        pct >= 35 ? 'text-risk-high'  : 'text-muted-foreground'
       }`}>{score}</span>
     </div>
   );
@@ -140,9 +126,9 @@ function ScoreBreakdown({ token }: { token: MemeToken }) {
       {bars.map((b) => {
         const pct   = Math.round((b.score / b.max) * 100);
         const color =
-          pct >= 80 ? 'bg-emerald-400' :
-          pct >= 50 ? 'bg-yellow-400'  :
-                      'bg-slate-500';
+          pct >= 80 ? 'bg-signal' :
+          pct >= 50 ? 'bg-risk-medium'  :
+                      'bg-muted-foreground/50';
         return (
           <div key={b.label}>
             <div className="flex justify-between text-[10px] text-muted-foreground mb-0.5">
@@ -166,9 +152,9 @@ function TokenCard({ token }: { token: MemeToken }) {
   const up1h = (token.priceChange1h ?? 0) >= 0;
 
   return (
-    <div className={`rounded-xl border bg-card p-4 flex flex-col gap-3 transition-colors ${
-      token.gemScore >= 75 ? 'border-emerald-500/40 bg-emerald-950/10' :
-      token.watchAction === 'avoid' ? 'border-red-900/30' : 'border-border'
+    <div className={`hud-panel rounded-lg p-4 flex flex-col gap-3 transition-colors ${
+      token.gemScore >= 75 ? 'border-signal/40' :
+      token.watchAction === 'avoid' ? 'border-risk-critical/30' : ''
     }`}>
       {/* Header */}
       <div className="flex items-start gap-2 flex-wrap">
@@ -263,17 +249,17 @@ function TokenCard({ token }: { token: MemeToken }) {
       </button>
 
       {expanded && (
-        <div className="flex flex-col gap-3 rounded-lg bg-white/5 p-3">
+        <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-3">
           <ScoreBreakdown token={token} />
           <p className="text-xs text-muted-foreground leading-relaxed">{token.gemBreakdown}</p>
           {token.rugFlags.length > 0 && (
-            <div className="flex items-start gap-1 text-orange-300 text-xs">
+            <div className="flex items-start gap-1 text-risk-high text-xs">
               <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
               <span>{token.rugFlags.join(' · ')}</span>
             </div>
           )}
           {token.priceTarget && (
-            <p className="text-xs text-emerald-300">🎯 {token.priceTarget}</p>
+            <p className="text-xs text-signal">🎯 {token.priceTarget}</p>
           )}
         </div>
       )}
@@ -281,10 +267,10 @@ function TokenCard({ token }: { token: MemeToken }) {
       {/* DEX link */}
       {token.dexUrl && (
         <a href={token.dexUrl} target="_blank" rel="noopener noreferrer" className="mt-auto">
-          <button className={`w-full flex items-center justify-center gap-1.5 rounded-lg text-white text-xs h-8 font-medium transition-colors ${
+          <button className={`w-full flex items-center justify-center gap-1.5 rounded-lg text-xs h-8 font-medium font-mono uppercase tracking-wide border transition-colors ${
             token.watchAction === 'avoid'
-              ? 'bg-slate-700 hover:bg-slate-600'
-              : 'bg-emerald-600 hover:bg-emerald-500'
+              ? 'bg-muted text-muted-foreground border-border hover:bg-accent'
+              : 'bg-signal/15 text-signal border-signal/40 hover:bg-signal/25'
           }`}>
             <ExternalLink className="h-3 w-3" />
             View on DexScreener
@@ -340,8 +326,8 @@ export function MemesClient({ tokens }: MemesClientProps) {
 
       {/* Hot gems banner */}
       {hotGems.length > 0 && (
-        <div className="rounded-xl border border-orange-500/40 bg-orange-950/15 p-4">
-          <div className="flex items-center gap-2 text-orange-300 font-semibold text-sm mb-2">
+        <div className="hud-panel rounded-lg border-risk-high/40 p-4">
+          <div className="flex items-center gap-2 text-risk-high font-semibold text-sm mb-2 font-mono uppercase tracking-wide">
             <Flame className="h-4 w-4" />
             {hotGems.length} Hot Gem{hotGems.length > 1 ? 's' : ''} Detected
           </div>
@@ -349,7 +335,7 @@ export function MemesClient({ tokens }: MemesClientProps) {
             {hotGems.map((t) => (
               <span
                 key={t.contractAddress ?? `${t.ticker}-${t.chain}`}
-                className="text-xs px-2 py-1 rounded-full bg-orange-500/20 text-orange-200 border border-orange-500/30"
+                className="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-risk-high/15 text-risk-high border border-risk-high/30"
               >
                 ${t.ticker} ({CHAIN_LABELS[t.chain]}) · {t.gemScore}/100
               </span>
@@ -404,7 +390,7 @@ export function MemesClient({ tokens }: MemesClientProps) {
           step={5}
           value={minGem}
           onChange={(e) => setMinGem(Number(e.target.value))}
-          className="max-w-xs accent-orange-400"
+          className="max-w-xs accent-emerald-500"
         />
       </div>
 
@@ -413,7 +399,7 @@ export function MemesClient({ tokens }: MemesClientProps) {
       </p>
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground text-sm">
+        <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground text-sm">
           No tokens match your filters.
         </div>
       ) : (

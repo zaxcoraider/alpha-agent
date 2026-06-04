@@ -22,22 +22,22 @@ type SortKey = 'conviction' | 'time' | 'risk';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<Idea['type'], { label: string; color: string; bg: string; border: string; Icon: React.ElementType }> = {
-  build:     { label: 'Build',     color: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30', Icon: Hammer     },
-  trade:     { label: 'Trade',     color: 'text-cyan-300',    bg: 'bg-cyan-500/15',    border: 'border-cyan-500/30',    Icon: TrendingUp },
-  narrative: { label: 'Narrative', color: 'text-violet-300',  bg: 'bg-violet-500/15',  border: 'border-violet-500/30',  Icon: Layers     },
+  build:     { label: 'Build',     color: 'text-signal',     bg: 'bg-signal/15',     border: 'border-signal/40',     Icon: Hammer     },
+  trade:     { label: 'Trade',     color: 'text-cyan-300',   bg: 'bg-cyan-500/15',   border: 'border-cyan-500/30',   Icon: TrendingUp },
+  narrative: { label: 'Narrative', color: 'text-violet-300', bg: 'bg-violet-500/15', border: 'border-violet-500/30', Icon: Layers     },
 };
 
 const RISK_COLORS: Record<Idea['risk'], string> = {
-  low:    'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
-  medium: 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30',
-  high:   'text-red-400 bg-red-500/15 border-red-500/30',
+  low:    'text-signal bg-signal/15 border-signal/40',
+  medium: 'text-risk-medium bg-risk-medium/15 border-risk-medium/40',
+  high:   'text-risk-critical bg-risk-critical/15 border-risk-critical/40',
 };
 
 const HORIZON_CONFIG: Record<Idea['timeHorizon'], { label: string; color: string }> = {
-  now:     { label: 'Act Now',    color: 'text-red-400'    },
-  days:    { label: 'Days',       color: 'text-orange-400' },
-  weeks:   { label: 'Weeks',      color: 'text-yellow-400' },
-  months:  { label: 'Months',     color: 'text-slate-400'  },
+  now:     { label: 'Act Now',    color: 'text-risk-critical' },
+  days:    { label: 'Days',       color: 'text-risk-high'     },
+  weeks:   { label: 'Weeks',      color: 'text-risk-medium'   },
+  months:  { label: 'Months',     color: 'text-muted-foreground' },
 };
 
 const CHAIN_COLORS: Record<string, string> = {
@@ -164,7 +164,7 @@ function BriefModal({ idea, onClose }: { idea: Idea; onClose: () => void }) {
                 <div className="flex gap-2 pt-2 border-t border-border">
                   <button
                     onClick={() => navigator.clipboard.writeText(text)}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-border transition-colors"
+                    className="text-xs px-3 py-1.5 rounded-lg bg-muted/40 hover:bg-muted border border-border transition-colors"
                   >
                     Copy
                   </button>
@@ -194,8 +194,8 @@ function ConvictionDots({ score }: { score: number }) {
           key={i}
           className={`h-1.5 w-1.5 rounded-full ${
             i < score
-              ? score >= 8 ? 'bg-emerald-400' : score >= 5 ? 'bg-yellow-400' : 'bg-slate-500'
-              : 'bg-white/10'
+              ? score >= 8 ? 'bg-signal' : score >= 5 ? 'bg-risk-medium' : 'bg-muted-foreground/50'
+              : 'bg-muted'
           }`}
         />
       ))}
@@ -212,8 +212,8 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
   const { Icon } = cfg;
 
   return (
-    <div className={`rounded-xl border bg-card p-4 flex flex-col gap-3 ${
-      idea.conviction >= 8 ? `${cfg.border} border` : 'border-border'
+    <div className={`hud-panel rounded-lg p-4 flex flex-col gap-3 ${
+      idea.conviction >= 8 ? cfg.border : ''
     }`}>
       {/* Header */}
       <div className="flex items-start gap-2">
@@ -244,9 +244,9 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-muted-foreground w-16">Conviction</span>
         <ConvictionDots score={idea.conviction} />
-        <span className={`text-[10px] font-bold ml-1 ${
-          idea.conviction >= 8 ? 'text-emerald-400' :
-          idea.conviction >= 5 ? 'text-yellow-400'  : 'text-slate-500'
+        <span className={`text-[10px] font-mono font-bold ml-1 ${
+          idea.conviction >= 8 ? 'text-signal' :
+          idea.conviction >= 5 ? 'text-risk-medium'  : 'text-muted-foreground'
         }`}>{idea.conviction}/10</span>
       </div>
 
@@ -259,7 +259,7 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
             </span>
           ))}
           {idea.tickers.map((t) => (
-            <span key={t} className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white/5 text-slate-300">
+            <span key={t} className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground">
               ${t}
             </span>
           ))}
@@ -270,7 +270,7 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
       {idea.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {idea.tags.map((tag) => (
-            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-muted-foreground">
+            <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded-sm font-mono bg-muted/40 text-muted-foreground">
               #{tag}
             </span>
           ))}
@@ -295,7 +295,7 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
       </button>
 
       {expanded && (
-        <div className="flex flex-col gap-3 rounded-lg bg-white/5 p-3">
+        <div className="flex flex-col gap-3 rounded-lg bg-muted/40 p-3">
           <p className="text-xs text-muted-foreground leading-relaxed">{idea.body}</p>
           {idea.actionItems.length > 0 && (
             <div>
@@ -303,7 +303,7 @@ function IdeaCard({ idea, onBrief }: { idea: Idea; onBrief: (idea: Idea) => void
               <ol className="space-y-1">
                 {idea.actionItems.map((item, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                    <span className="flex-shrink-0 text-[10px] font-bold text-emerald-400 w-4">{i + 1}.</span>
+                    <span className="flex-shrink-0 text-[10px] font-mono font-bold text-signal w-4">{i + 1}.</span>
                     {item}
                   </li>
                 ))}
@@ -339,15 +339,15 @@ function WeeklyReportPanel({ report }: { report: WeeklyReport }) {
         <p className="text-lg font-bold leading-snug mb-4">{report.headline}</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="rounded-lg bg-white/5 p-3">
+          <div className="rounded-lg bg-muted/40 p-3">
             <p className="text-[10px] font-semibold text-violet-300 mb-1.5 uppercase tracking-wide">Top Narrative</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{report.topNarrative}</p>
           </div>
-          <div className="rounded-lg bg-white/5 p-3">
-            <p className="text-[10px] font-semibold text-emerald-300 mb-1.5 uppercase tracking-wide">Best Build Opp</p>
+          <div className="rounded-lg bg-muted/40 p-3">
+            <p className="text-[10px] font-semibold text-signal mb-1.5 uppercase tracking-wide">Best Build Opp</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{report.topBuildOpp}</p>
           </div>
-          <div className="rounded-lg bg-white/5 p-3">
+          <div className="rounded-lg bg-muted/40 p-3">
             <p className="text-[10px] font-semibold text-cyan-300 mb-1.5 uppercase tracking-wide">Top Trade Setup</p>
             <p className="text-xs text-muted-foreground leading-relaxed">{report.topTradeSetup}</p>
           </div>
@@ -355,24 +355,24 @@ function WeeklyReportPanel({ report }: { report: WeeklyReport }) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="hud-panel rounded-lg p-4">
           <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Watchlist</p>
           <div className="flex flex-wrap gap-2">
             {report.watchlist.map((item) => (
-              <span key={item} className="text-xs font-mono px-2 py-1 rounded bg-white/5 border border-border">
+              <span key={item} className="text-xs font-mono px-2 py-1 rounded-sm bg-muted/40 border border-border">
                 {item}
               </span>
             ))}
           </div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4">
+        <div className="hud-panel rounded-lg p-4">
           <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide flex items-center gap-1">
-            <AlertTriangle className="h-3 w-3 text-orange-400" /> Key Risks
+            <AlertTriangle className="h-3 w-3 text-risk-high" /> Key Risks
           </p>
           <ul className="space-y-1.5">
             {report.risks.map((risk) => (
               <li key={risk} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                <span className="text-orange-400 flex-shrink-0 mt-0.5">•</span>
+                <span className="text-risk-high flex-shrink-0 mt-0.5">•</span>
                 {risk}
               </li>
             ))}
@@ -433,17 +433,17 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-mono uppercase tracking-wide border-b-2 transition-colors whitespace-nowrap ${
                 tab === t.key
-                  ? 'border-emerald-500 text-emerald-400'
+                  ? 'border-signal text-signal'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
               <t.Icon className="h-3.5 w-3.5" />
               {t.label}
               {t.count !== undefined && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                  tab === t.key ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-muted-foreground'
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-mono font-bold ${
+                  tab === t.key ? 'bg-signal/20 text-signal' : 'bg-muted/40 text-muted-foreground'
                 }`}>{t.count}</span>
               )}
             </button>
@@ -461,7 +461,7 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
         weeklyReport ? (
           <WeeklyReportPanel report={weeklyReport} />
         ) : (
-          <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground text-sm">
+          <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground text-sm">
             No weekly report yet — trigger a rescan to generate one.
           </div>
         )
@@ -473,10 +473,10 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
               <button
                 key={s.key}
                 onClick={() => setSort(s.key)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+                className={`px-2.5 py-1 rounded-sm text-[11px] font-mono uppercase tracking-wide border transition-colors ${
                   sort === s.key
-                    ? 'bg-emerald-600 border-emerald-500 text-white'
-                    : 'bg-card border-border text-muted-foreground hover:border-emerald-500/50'
+                    ? 'bg-signal/15 border-signal/40 text-signal'
+                    : 'bg-card border-border text-muted-foreground hover:border-signal/50'
                 }`}
               >
                 {s.label}
@@ -494,7 +494,7 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
                 step={1}
                 value={minConviction}
                 onChange={(e) => setMin(Number(e.target.value))}
-                className="max-w-[120px] accent-emerald-500"
+                className="max-w-[120px] accent-signal"
               />
             </div>
           </div>
@@ -504,7 +504,7 @@ export function IdeasClient({ ideas, weeklyReport }: IdeasClientProps) {
           </p>
 
           {filtered.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground text-sm">
+            <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground text-sm">
               No ideas match your filters.
             </div>
           ) : (

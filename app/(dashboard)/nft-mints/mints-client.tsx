@@ -54,32 +54,20 @@ const STATUS_COLORS: Record<string, string> = {
 // ── Chip helper ───────────────────────────────────────────────────────────────
 
 function Chip({
-  label, active, color = 'emerald', onClick,
+  label, active, onClick,
 }: {
   label: string;
   active: boolean;
   color?: 'emerald' | 'sky' | 'orange' | 'violet';
   onClick: () => void;
 }) {
-  const active_cls: Record<string, string> = {
-    emerald: 'bg-emerald-600 border-emerald-500 text-white',
-    sky:     'bg-sky-600 border-sky-500 text-white',
-    orange:  'bg-orange-600 border-orange-500 text-white',
-    violet:  'bg-violet-600 border-violet-500 text-white',
-  };
-  const hover_cls: Record<string, string> = {
-    emerald: 'hover:border-emerald-500/50',
-    sky:     'hover:border-sky-500/40',
-    orange:  'hover:border-orange-500/40',
-    violet:  'hover:border-violet-500/40',
-  };
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+      className={`shrink-0 px-2.5 py-1 rounded-sm text-[11px] font-mono uppercase tracking-wide border transition-colors ${
         active
-          ? active_cls[color]
-          : `bg-card border-border text-muted-foreground ${hover_cls[color]}`
+          ? 'bg-signal/15 text-signal border-signal/40'
+          : 'bg-card border-border text-muted-foreground hover:border-signal/30 hover:text-foreground'
       }`}
     >
       {label}
@@ -92,20 +80,20 @@ function Chip({
 function AlphaBar({ score }: { score: number }) {
   const pct   = Math.min(100, Math.max(0, score));
   const color =
-    pct >= 80 ? 'bg-emerald-400' :
-    pct >= 60 ? 'bg-yellow-400'  :
-    pct >= 40 ? 'bg-orange-400'  :
-                'bg-slate-500';
+    pct >= 80 ? 'bg-signal' :
+    pct >= 60 ? 'bg-risk-medium'  :
+    pct >= 40 ? 'bg-risk-high'  :
+                'bg-muted-foreground/50';
 
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 rounded-full bg-white/10">
+      <div className="h-1.5 flex-1 rounded-full bg-muted">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className={`text-xs font-bold tabular-nums ${
-        pct >= 80 ? 'text-emerald-400' :
-        pct >= 60 ? 'text-yellow-400'  :
-        pct >= 40 ? 'text-orange-400'  : 'text-slate-400'
+      <span className={`text-xs font-mono font-bold tabular-nums ${
+        pct >= 80 ? 'text-signal' :
+        pct >= 60 ? 'text-risk-medium'  :
+        pct >= 40 ? 'text-risk-high'  : 'text-muted-foreground'
       }`}>{score}</span>
     </div>
   );
@@ -117,8 +105,8 @@ function MintCard({ mint }: { mint: NFTMint }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={`relative rounded-xl border bg-card p-4 flex flex-col gap-3 transition-colors ${
-      mint.alphaScore >= 80 ? 'border-emerald-500/40 bg-emerald-950/10' : 'border-border'
+    <div className={`relative hud-panel rounded-lg p-4 flex flex-col gap-3 transition-colors ${
+      mint.alphaScore >= 80 ? 'border-signal/40' : ''
     }`}>
       {/* Name + badges */}
       <div className="flex items-start gap-2 flex-wrap">
@@ -212,10 +200,10 @@ function MintCard({ mint }: { mint: NFTMint }) {
       </button>
 
       {expanded && (
-        <div className="rounded-lg bg-white/5 p-3 text-xs text-muted-foreground leading-relaxed">
+        <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed">
           <p className="mb-2">{mint.alphaBreakdown}</p>
           {mint.rugFlags.length > 0 && (
-            <div className="flex items-start gap-1 text-orange-300">
+            <div className="flex items-start gap-1 text-risk-high">
               <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
               <span>Flags: {mint.rugFlags.join(' · ')}</span>
             </div>
@@ -226,7 +214,7 @@ function MintCard({ mint }: { mint: NFTMint }) {
       {/* Mint link */}
       {mint.mintLink && (
         <a href={mint.mintLink} target="_blank" rel="noopener noreferrer" className="mt-auto">
-          <button className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs h-8 font-medium transition-colors">
+          <button className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-signal/15 text-signal border border-signal/40 hover:bg-signal/25 text-xs h-8 font-medium font-mono uppercase tracking-wide transition-colors">
             <ExternalLink className="h-3 w-3" />
             Mint Now
           </button>
@@ -278,8 +266,8 @@ export function MintsClient({ mints }: MintsClientProps) {
 
       {/* High-alpha alert banner */}
       {highAlpha.length > 0 && (
-        <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-4">
-          <div className="flex items-center gap-2 text-emerald-300 font-semibold text-sm mb-2">
+        <div className="hud-panel rounded-lg border-signal/40 p-4">
+          <div className="flex items-center gap-2 text-signal font-semibold text-sm mb-2 font-mono uppercase tracking-wide">
             <Zap className="h-4 w-4" />
             {highAlpha.length} High-Alpha Mint{highAlpha.length > 1 ? 's' : ''} Detected
           </div>
@@ -287,7 +275,7 @@ export function MintsClient({ mints }: MintsClientProps) {
             {highAlpha.map((m) => (
               <span
                 key={m.contractAddress ?? m.name}
-                className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-500/30"
+                className="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-signal/15 text-signal border border-signal/30"
               >
                 {m.name} · {m.alphaScore}/100{m.mintPrice === 0 ? ' · FREE' : ''}
               </span>
@@ -352,7 +340,7 @@ export function MintsClient({ mints }: MintsClientProps) {
 
       {/* Cards */}
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground text-sm">
+        <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground text-sm">
           No mints match your filters.
         </div>
       ) : (

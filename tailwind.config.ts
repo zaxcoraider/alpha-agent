@@ -35,6 +35,27 @@ const config: Config = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        // HUD palette — registered as real colors so opacity modifiers work
+        // (e.g. bg-signal/15, border-signal/40). Values track globals.css tokens.
+        signal: {
+          DEFAULT: 'hsl(var(--signal))',
+          dim: 'hsl(var(--signal-dim))',
+        },
+        risk: {
+          critical: 'hsl(var(--risk-critical))',
+          high: 'hsl(var(--risk-high))',
+          medium: 'hsl(var(--risk-medium))',
+          low: 'hsl(var(--risk-low))',
+        },
+        chain: {
+          sol: 'hsl(var(--chain-sol))',
+          eth: 'hsl(var(--chain-eth))',
+          base: 'hsl(var(--chain-base))',
+          arbitrum: 'hsl(var(--chain-arbitrum))',
+          polygon: 'hsl(var(--chain-polygon))',
+          optimism: 'hsl(var(--chain-optimism))',
+          bnb: 'hsl(var(--chain-bnb))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',

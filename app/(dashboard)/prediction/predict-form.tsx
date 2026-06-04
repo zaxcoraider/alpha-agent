@@ -79,11 +79,11 @@ export function PredictForm() {
   const isLoading = state.phase === 'submitting' || state.phase === 'polling';
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="hud-panel rounded-lg overflow-hidden">
       {/* Header bar */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-emerald-500/3">
-        <Sparkles size={14} className="text-emerald-400 shrink-0" />
-        <span className="text-xs font-semibold text-emerald-400/80 uppercase tracking-wider">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-signal/5">
+        <Sparkles size={14} className="text-signal shrink-0" />
+        <span className="text-xs font-semibold text-signal/80 uppercase tracking-wider font-mono">
           Predict Anything
         </span>
         <span className="text-xs text-muted-foreground/50 ml-1">
@@ -102,9 +102,9 @@ export function PredictForm() {
               onClick={() => setMode(m.value)}
               disabled={isLoading}
               title={m.desc}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+              className={`rounded-sm px-2.5 py-1 text-xs font-mono transition-colors disabled:opacity-40 ${
                 mode === m.value
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  ? 'bg-signal/20 text-signal border border-signal/40'
                   : 'bg-muted/40 text-muted-foreground hover:text-foreground border border-transparent'
               }`}
             >
@@ -126,7 +126,7 @@ export function PredictForm() {
               type="button"
               onClick={() => setDepth(d.value)}
               disabled={isLoading}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40 ${
+              className={`rounded-sm px-2.5 py-1 text-xs font-mono transition-colors disabled:opacity-40 ${
                 depth === d.value
                   ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                   : 'bg-muted/40 text-muted-foreground hover:text-foreground border border-transparent'
@@ -149,13 +149,13 @@ export function PredictForm() {
               onChange={(e) => setValue(e.target.value)}
               placeholder="Will BTC hit $200k by end of 2026?"
               disabled={isLoading}
-              className="w-full rounded-lg border border-border bg-background/60 pl-9 pr-3 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/30 disabled:opacity-50 transition-colors"
+              className="w-full rounded-lg border border-border bg-background/60 pl-9 pr-3 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-signal/50 focus:border-signal/30 disabled:opacity-50 transition-colors"
             />
           </div>
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
+            className="rounded-lg bg-signal/15 text-signal border border-signal/40 hover:bg-signal/25 px-4 py-2.5 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
           >
             {state.phase === 'submitting' ? 'Starting…' : 'Analyze'}
           </button>
@@ -163,8 +163,8 @@ export function PredictForm() {
 
         {/* Polling state */}
         {state.phase === 'polling' && (
-          <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/15 bg-emerald-500/5 px-3 py-2.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+          <div className="flex items-center gap-2.5 rounded-lg border border-signal/15 bg-signal/5 px-3 py-2.5">
+            <span className="h-2 w-2 rounded-full bg-signal animate-pulse-dot shrink-0" />
             <div className="text-xs text-muted-foreground min-w-0">
               <span className="text-foreground font-medium">Analyzing: </span>
               <span className="truncate">{state.question}</span>
@@ -180,7 +180,7 @@ export function PredictForm() {
 
         {/* Error */}
         {state.phase === 'error' && (
-          <p className="text-xs text-red-400 bg-red-500/5 border border-red-500/15 rounded-lg px-3 py-2">
+          <p className="text-xs text-risk-critical bg-risk-critical/5 border border-risk-critical/15 rounded-lg px-3 py-2">
             {state.message}
           </p>
         )}

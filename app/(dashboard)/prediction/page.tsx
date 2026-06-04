@@ -4,7 +4,8 @@ import { desc, eq } from 'drizzle-orm';
 import { RescanButton } from './rescan-button';
 import { PredictForm } from './predict-form';
 import { PredictionCard } from './prediction-card';
-import { BarChart2, TrendingUp, Target, Users } from 'lucide-react';
+import { BarChart2 } from 'lucide-react';
+import { PageHeader, StatGrid, Stat, EmptyState } from '@/components/ui/hud';
 import type { Prediction } from '@/lib/agents/prediction';
 
 async function getPredictions() {
@@ -36,22 +37,6 @@ async function getPredictions() {
   }
 }
 
-function StatCard({ icon: Icon, value, label, color = 'text-foreground' }: {
-  icon: React.ElementType; value: string | number; label: string; color?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-      <div className="h-9 w-9 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
-        <Icon size={16} className="text-muted-foreground" />
-      </div>
-      <div>
-        <p className={`text-xl font-bold tabular-nums ${color}`}>{value}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  );
-}
-
 export default async function PredictionPage() {
   const { predictions, customPredictions, lastRun } = await getPredictions();
 
@@ -66,41 +51,37 @@ export default async function PredictionPage() {
   const totalAnalysts = predictions.reduce((s, p) => s + (p.analystCount ?? 1), 0);
 
   return (
-    <div className="space-y-6">
-
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Prediction Markets</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Polymarket · Kalshi · 10-analyst ensemble · Grok X · MiroFish swarm
-            {lastScan && <span className="text-muted-foreground/50"> · Last scan: {lastScan}</span>}
-          </p>
-        </div>
-        <RescanButton agent="prediction" />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow="Prediction Markets"
+        title="Prediction Markets"
+        subtitle="Polymarket · Kalshi · 12-analyst ensemble · Grok X · MiroFish swarm"
+        meta={lastScan ? `last scan ${lastScan}` : undefined}
+        actions={<RescanButton agent="prediction" />}
+      />
 
       {/* Custom prediction input */}
       <PredictForm />
 
       {/* Stats */}
       {predictions.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={BarChart2} value={predictions.length} label="Markets scanned" />
-          <StatCard icon={Target}    value={withEdge.length}    label="Edges found"       color="text-emerald-400" />
-          <StatCard icon={TrendingUp} value={`${avgEdge}%`}    label="Avg edge"           color="text-yellow-400" />
-          <StatCard icon={Users}     value={totalAnalysts}      label="Analyst calls"      color="text-blue-400" />
-        </div>
+        <StatGrid>
+          <Stat value={predictions.length} label="Markets scanned" tone="default" />
+          <Stat value={withEdge.length}    label="Edges found"     tone="signal"  />
+          <Stat value={`${avgEdge}%`}      label="Avg edge"        tone="amber" pad={false} />
+          <Stat value={totalAnalysts}      label="Analyst calls"   tone="blue"    />
+        </StatGrid>
       )}
 
       {/* Custom predictions */}
       {customPredictions.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
+        <section className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-            <h2 className="text-sm font-semibold text-violet-400">
-              Your Custom Predictions ({customPredictions.length})
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-violet-400">
+              Your Custom Predictions
             </h2>
+            <span className="font-mono text-[10px] text-muted-foreground">[{String(customPredictions.length).padStart(2, '0')}]</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {customPredictions.map((p) => <PredictionCard key={p.marketId} p={p} />)}
@@ -110,12 +91,13 @@ export default async function PredictionPage() {
 
       {/* Edge opportunities */}
       {withEdge.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <h2 className="text-sm font-semibold text-emerald-400">
-              Edge Opportunities ({withEdge.length})
+        <section className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-signal animate-pulse-dot" />
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-signal">
+              Edge Opportunities
             </h2>
+            <span className="font-mono text-[10px] text-muted-foreground">[{String(withEdge.length).padStart(2, '0')}]</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {withEdge.map((p) => <PredictionCard key={p.marketId} p={p} />)}
@@ -125,12 +107,13 @@ export default async function PredictionPage() {
 
       {/* No edge */}
       {skipped.length > 0 && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
+        <section className="flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              No Edge ({skipped.length})
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-muted-foreground">
+              No Edge
             </h2>
+            <span className="font-mono text-[10px] text-muted-foreground">[{String(skipped.length).padStart(2, '0')}]</span>
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             {skipped.map((p) => <PredictionCard key={p.marketId} p={p} />)}
@@ -140,18 +123,12 @@ export default async function PredictionPage() {
 
       {/* Empty state */}
       {predictions.length === 0 && customPredictions.length === 0 && (
-        <div className="rounded-xl border border-dashed border-border p-16 text-center">
-          <div className="h-12 w-12 rounded-xl bg-muted/40 flex items-center justify-center mx-auto mb-4">
-            <BarChart2 size={20} className="text-muted-foreground/40" />
-          </div>
-          <p className="text-sm text-muted-foreground font-medium">No predictions yet</p>
-          <p className="text-xs text-muted-foreground/60 mt-1.5">
-            Type a question above to analyze anything, or click{' '}
-            <strong className="text-muted-foreground">Scan Now</strong> to scan Polymarket + Kalshi.
-          </p>
-        </div>
+        <EmptyState
+          icon={<BarChart2 size={20} />}
+          title="No predictions yet"
+          hint={<>Type a question above to analyze anything, or click <strong className="text-muted-foreground">Scan Now</strong> to scan Polymarket + Kalshi.</>}
+        />
       )}
-
     </div>
   );
 }

@@ -4,19 +4,19 @@ import type { Prediction } from '@/lib/agents/prediction';
 
 export function EdgeBadge({ edge, side }: { edge: number; side: string }) {
   if (side === 'SKIP') return (
-    <span className="rounded-full bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground font-medium">
+    <span className="rounded-sm bg-muted/60 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
       No Edge
     </span>
   );
   const pct = Math.round(edge * 100);
   const isHigh = pct >= 20;
   return (
-    <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold border ${
+    <div className={`flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[10px] font-mono font-bold tracking-wide border ${
       isHigh
-        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-        : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+        ? 'bg-signal/10 text-signal border-signal/40'
+        : 'bg-risk-medium/10 text-risk-medium border-risk-medium/40'
     }`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${isHigh ? 'bg-emerald-400' : 'bg-yellow-400'}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${isHigh ? 'bg-signal' : 'bg-risk-medium'}`} />
       {side} +{pct}%
     </div>
   );
@@ -49,7 +49,7 @@ export function AnalystRow({ analyst }: {
 }) {
   const pct      = Math.round(analyst.yourProb * 100);
   const conf     = Math.round(analyst.confidence * 100);
-  const barColor = conf >= 70 ? 'bg-emerald-500' : conf >= 50 ? 'bg-yellow-500' : 'bg-muted-foreground/50';
+  const barColor = conf >= 70 ? 'bg-signal' : conf >= 50 ? 'bg-risk-medium' : 'bg-muted-foreground/50';
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
@@ -76,7 +76,7 @@ export function SourceBadge({ source }: { source?: string }) {
   };
   const c = cfg[source] ?? { bg: 'bg-muted', text: 'text-muted-foreground', dot: 'bg-muted-foreground', label: source };
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium border border-current/10 ${c.bg} ${c.text}`}>
+    <span className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide border border-current/10 ${c.bg} ${c.text}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
       {c.label}
     </span>
@@ -93,17 +93,17 @@ export function PredictionCard({ p }: { p: Prediction }) {
   const hasEdge      = p.recommendedSide !== 'SKIP';
 
   return (
-    <div className={`group relative rounded-xl border bg-card p-4 space-y-3.5 transition-all duration-200 hover:shadow-lg ${
+    <div className={`group relative hud-panel rounded-lg p-4 space-y-3.5 transition-all duration-200 hover:shadow-lg ${
       p.miroFishEnhanced
         ? 'border-purple-500/25 hover:border-purple-500/40 hover:shadow-purple-500/5'
         : hasEdge
-        ? 'border-emerald-500/20 hover:border-emerald-500/35 hover:shadow-emerald-500/5 gradient-border-emerald'
-        : 'border-border hover:border-border/80'
+        ? 'border-signal/20 hover:border-signal/35 hover:shadow-signal/5'
+        : 'hover:border-border/80'
     }`}>
 
       {/* Top glow line for high-edge cards */}
       {hasEdge && edgePct >= 20 && (
-        <div className="absolute inset-x-0 top-0 h-px rounded-t-xl bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-signal/40 to-transparent" />
       )}
 
       {/* Header */}
@@ -128,7 +128,7 @@ export function PredictionCard({ p }: { p: Prediction }) {
       {/* Probability bars */}
       <div className="space-y-2 py-0.5">
         <ProbBar label="Market"   prob={p.marketProb} color="bg-blue-500/70" />
-        <ProbBar label="Ensemble" prob={p.yourProb}   color={hasEdge ? 'bg-emerald-500' : 'bg-muted-foreground/50'} />
+        <ProbBar label="Ensemble" prob={p.yourProb}   color={hasEdge ? 'bg-signal' : 'bg-muted-foreground/50'} />
         {p.miroFishMeanProb != null && (
           <div className="flex items-center gap-2.5 text-xs">
             <span className="w-16 shrink-0 text-purple-400/80">
@@ -157,7 +157,7 @@ export function PredictionCard({ p }: { p: Prediction }) {
         <ul className="space-y-1.5">
           {p.keyEvidence.slice(0, 2).map((e, i) => (
             <li key={i} className="flex gap-2 text-xs text-muted-foreground">
-              <span className="mt-0.5 text-emerald-500/70 shrink-0">›</span>
+              <span className="mt-0.5 text-signal/70 shrink-0">›</span>
               <span className="leading-relaxed">{e}</span>
             </li>
           ))}
@@ -175,7 +175,7 @@ export function PredictionCard({ p }: { p: Prediction }) {
               <span>expand breakdown</span>
             </div>
           </summary>
-          <div className="mt-3 space-y-3 border-l-2 border-emerald-500/15 pl-3">
+          <div className="mt-3 space-y-3 border-l-2 border-signal/15 pl-3">
             {p.analystBreakdown!.map((a) => (
               <AnalystRow key={a.role} analyst={a} />
             ))}
@@ -189,7 +189,7 @@ export function PredictionCard({ p }: { p: Prediction }) {
           <><span className="font-medium">${(p.volumeUsd / 1000).toFixed(0)}k vol</span><span className="text-border">·</span></>
         )}
         <span>
-          <span className={confPct >= 70 ? 'text-emerald-400/80' : confPct >= 50 ? 'text-yellow-400/80' : ''}>
+          <span className={confPct >= 70 ? 'text-signal/80' : confPct >= 50 ? 'text-risk-medium/80' : ''}>
             {confPct}% conf
           </span>
         </span>

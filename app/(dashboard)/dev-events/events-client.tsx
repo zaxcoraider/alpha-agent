@@ -8,18 +8,18 @@ import { cn } from '@/lib/utils/cn';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  hackathon:   { label: 'Hackathon',    color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/25' },
-  grant:       { label: 'Grant',        color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/25' },
-  bounty:      { label: 'Bounty',       color: 'text-orange-400',  bg: 'bg-orange-500/10 border-orange-500/25' },
-  audit:       { label: 'Audit',        color: 'text-purple-400',  bg: 'bg-purple-500/10 border-purple-500/25' },
-  accelerator: { label: 'Accelerator',  color: 'text-cyan-400',    bg: 'bg-cyan-500/10 border-cyan-500/25' },
-  bug_bounty:  { label: 'Bug Bounty',   color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/25' },
-  prize:       { label: 'Prize',        color: 'text-yellow-400',  bg: 'bg-yellow-500/10 border-yellow-500/25' },
+  hackathon:   { label: 'Hackathon',    color: 'text-signal',        bg: 'bg-signal/10 border-signal/25' },
+  grant:       { label: 'Grant',        color: 'text-blue-400',      bg: 'bg-blue-500/10 border-blue-500/25' },
+  bounty:      { label: 'Bounty',       color: 'text-risk-high',     bg: 'bg-risk-high/10 border-risk-high/25' },
+  audit:       { label: 'Audit',        color: 'text-purple-400',    bg: 'bg-purple-500/10 border-purple-500/25' },
+  accelerator: { label: 'Accelerator',  color: 'text-cyan-400',      bg: 'bg-cyan-500/10 border-cyan-500/25' },
+  bug_bounty:  { label: 'Bug Bounty',   color: 'text-risk-critical', bg: 'bg-risk-critical/10 border-risk-critical/25' },
+  prize:       { label: 'Prize',        color: 'text-risk-medium',   bg: 'bg-risk-medium/10 border-risk-medium/25' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  closing_soon: { label: 'Closing Soon', color: 'text-red-400' },
-  active:       { label: 'Active',       color: 'text-emerald-400' },
+  closing_soon: { label: 'Closing Soon', color: 'text-risk-critical' },
+  active:       { label: 'Active',       color: 'text-signal' },
   upcoming:     { label: 'Upcoming',     color: 'text-blue-400' },
   ended:        { label: 'Ended',        color: 'text-muted-foreground' },
 };
@@ -29,10 +29,10 @@ type TrackerState = (typeof TRACKER_STATES)[number];
 
 const TRACKER_CONFIG: Record<TrackerState, { label: string; color: string }> = {
   interested: { label: 'Interested',  color: 'text-blue-400' },
-  applied:    { label: 'Applied',     color: 'text-emerald-400' },
-  building:   { label: 'Building',    color: 'text-yellow-400' },
+  applied:    { label: 'Applied',     color: 'text-signal' },
+  building:   { label: 'Building',    color: 'text-risk-medium' },
   submitted:  { label: 'Submitted',   color: 'text-purple-400' },
-  won:        { label: 'Won 🏆',      color: 'text-yellow-300' },
+  won:        { label: 'Won 🏆',      color: 'text-risk-medium' },
   passed:     { label: 'Passed',      color: 'text-muted-foreground' },
 };
 
@@ -96,7 +96,7 @@ function TrackerButton({ id, state, set }: {
               className="w-full flex items-center justify-between px-3 py-2 text-xs hover:bg-accent transition-colors"
             >
               <span className={TRACKER_CONFIG[s].color}>{TRACKER_CONFIG[s].label}</span>
-              {current === s && <Check size={10} className="text-emerald-400" />}
+              {current === s && <Check size={10} className="text-signal" />}
             </button>
           ))}
           {current && (
@@ -128,26 +128,26 @@ function OpportunityCard({
   const statusCfg = STATUS_CONFIG[opp.status] ?? { label: opp.status, color: 'text-muted-foreground' };
 
   const scoreColor =
-    opp.matchScore >= 8 ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' :
-    opp.matchScore >= 6 ? 'text-yellow-400 bg-yellow-500/15 border-yellow-500/30' :
+    opp.matchScore >= 8 ? 'text-signal bg-signal/15 border-signal/40' :
+    opp.matchScore >= 6 ? 'text-risk-medium bg-risk-medium/15 border-risk-medium/40' :
     'text-muted-foreground bg-muted/30 border-border';
 
   return (
     <div className={cn(
-      'rounded-xl border bg-card p-4 flex flex-col gap-3 transition-all hover:border-border/80',
-      opp.status === 'closing_soon' && 'border-red-500/30',
+      'hud-panel rounded-lg p-4 flex flex-col gap-3 transition-all hover:border-border/80',
+      opp.status === 'closing_soon' && 'border-risk-critical/30',
     )}>
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', typeCfg.bg, typeCfg.color)}>
+          <span className={cn('rounded-sm border px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wide', typeCfg.bg, typeCfg.color)}>
             {typeCfg.label}
           </span>
-          <span className={cn('text-[10px] font-medium', statusCfg.color)}>
+          <span className={cn('text-[10px] font-mono uppercase tracking-wide', statusCfg.color)}>
             {statusCfg.label}
           </span>
         </div>
-        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-bold shrink-0', scoreColor)}>
+        <span className={cn('rounded-sm border px-1.5 py-0.5 text-[10px] font-mono font-bold shrink-0', scoreColor)}>
           {opp.matchScore}/10
         </span>
       </div>
@@ -157,8 +157,8 @@ function OpportunityCard({
         <h3 className="text-sm font-semibold text-foreground leading-snug">{opp.title}</h3>
         {opp.prizeTotal && (
           <div className="flex items-center gap-1.5 mt-1">
-            <Trophy size={11} className="text-yellow-400 shrink-0" />
-            <span className="text-sm font-bold text-yellow-400">{opp.prizeTotal}</span>
+            <Trophy size={11} className="text-risk-medium shrink-0" />
+            <span className="text-sm font-bold text-risk-medium">{opp.prizeTotal}</span>
             {opp.prizeBreakdown && (
               <span className="text-[10px] text-muted-foreground truncate">{opp.prizeBreakdown}</span>
             )}
@@ -168,7 +168,7 @@ function OpportunityCard({
 
       {/* Deadline */}
       {opp.deadline && (
-        <div className={cn('flex items-center gap-1.5', opp.status === 'closing_soon' ? 'text-red-400' : 'text-muted-foreground')}>
+        <div className={cn('flex items-center gap-1.5', opp.status === 'closing_soon' ? 'text-risk-critical' : 'text-muted-foreground')}>
           <Clock size={11} className="shrink-0" />
           <span className="text-xs">
             {opp.daysLeft !== undefined && opp.daysLeft !== null
@@ -186,7 +186,7 @@ function OpportunityCard({
       <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{opp.description}</p>
 
       {/* Match reason */}
-      <p className="text-xs text-emerald-400/80 leading-relaxed">{opp.matchReason}</p>
+      <p className="text-xs text-signal/80 leading-relaxed">{opp.matchReason}</p>
 
       {/* Tags */}
       <div className="flex flex-wrap gap-1">
@@ -194,7 +194,7 @@ function OpportunityCard({
           <span key={c} className="rounded px-1.5 py-0.5 text-[10px] bg-muted/40 text-muted-foreground font-mono">{c}</span>
         ))}
         {opp.skills.slice(0, 4).map((s) => (
-          <span key={s} className="rounded px-1.5 py-0.5 text-[10px] bg-primary/10 text-primary/70">{s}</span>
+          <span key={s} className="rounded px-1.5 py-0.5 text-[10px] bg-purple-500/10 text-purple-300/80 font-mono">{s}</span>
         ))}
       </div>
 
@@ -213,7 +213,7 @@ function OpportunityCard({
             href={opp.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors"
+            className="flex items-center gap-1.5 rounded-lg bg-signal/15 text-signal border border-signal/40 hover:bg-signal/25 px-3 py-1.5 text-xs font-semibold font-mono uppercase tracking-wide transition-colors"
           >
             Apply <ExternalLink size={10} />
           </a>
@@ -276,13 +276,13 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
     <div className="space-y-4">
       {/* Closing soon banner */}
       {closingSoon.length > 0 && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-3">
-          <Clock size={14} className="text-red-400 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-2 hud-panel rounded-lg border-risk-critical/30 px-4 py-3">
+          <Clock size={14} className="text-risk-critical shrink-0 mt-0.5" />
           <div>
-            <span className="text-xs font-semibold text-red-400">
+            <span className="text-xs font-semibold text-risk-critical font-mono uppercase tracking-wide">
               {closingSoon.length} deadline{closingSoon.length > 1 ? 's' : ''} in ≤3 days —
             </span>
-            <span className="text-xs text-red-300/80 ml-1">
+            <span className="text-xs text-risk-critical/80 ml-1">
               {closingSoon.map((o) => o.title).join(' · ')}
             </span>
           </div>
@@ -291,17 +291,17 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2 md:gap-3">
-        <div className="rounded-xl border border-border bg-card px-4 py-3 text-center">
-          <p className="text-xl font-bold">{opportunities.length}</p>
-          <p className="text-xs text-muted-foreground">Opportunities</p>
+        <div className="hud-panel rounded-lg px-4 py-3">
+          <p className="text-2xl font-mono font-bold tabular-nums">{String(opportunities.length).padStart(2, '0')}</p>
+          <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground mt-1">Opportunities</p>
         </div>
-        <div className="rounded-xl border border-border bg-card px-4 py-3 text-center">
-          <p className="text-xl font-bold text-emerald-400">{highMatch}</p>
-          <p className="text-xs text-muted-foreground">Score ≥ 8 match</p>
+        <div className="hud-panel rounded-lg px-4 py-3">
+          <p className="text-2xl font-mono font-bold tabular-nums text-signal">{String(highMatch).padStart(2, '0')}</p>
+          <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground mt-1">Score ≥ 8 match</p>
         </div>
-        <div className="rounded-xl border border-border bg-card px-4 py-3 text-center">
-          <p className="text-xl font-bold text-yellow-400">{totalPrize}</p>
-          <p className="text-xs text-muted-foreground">With prizes</p>
+        <div className="hud-panel rounded-lg px-4 py-3">
+          <p className="text-2xl font-mono font-bold tabular-nums text-risk-medium">{String(totalPrize).padStart(2, '0')}</p>
+          <p className="text-[10px] tracking-[0.18em] uppercase text-muted-foreground mt-1">With prizes</p>
         </div>
       </div>
 
@@ -314,10 +314,10 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
               key={key}
               onClick={() => setTypeFilter(key)}
               className={cn(
-                'rounded-full px-3 py-1 text-xs font-medium transition-all',
+                'rounded-sm px-3 py-1 text-[11px] font-mono uppercase tracking-wide transition-all border',
                 typeFilter === key
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'bg-muted/40 text-muted-foreground hover:bg-muted/70 border border-transparent',
+                  ? 'bg-signal/15 text-signal border-signal/40'
+                  : 'bg-card text-muted-foreground hover:border-signal/30 hover:text-foreground border-border',
               )}
             >
               {label}
@@ -331,7 +331,7 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortKey)}
-            className="rounded-lg border border-border bg-card px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500/40"
+            className="rounded-sm border border-border bg-card px-3 py-1.5 text-xs font-mono outline-none focus:ring-1 focus:ring-signal/40"
           >
             <option value="score">Sort: Match Score</option>
             <option value="deadline">Sort: Deadline</option>
@@ -343,7 +343,7 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
             <input
               type="range" min={1} max={10} step={1} value={minScore}
               onChange={(e) => setMinScore(Number(e.target.value))}
-              className="w-24 accent-emerald-500"
+              className="w-24 accent-signal"
             />
             <span className="font-mono text-foreground w-4">{minScore}</span>
           </div>
@@ -354,7 +354,7 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
             className={cn(
               'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-all',
               remoteOnly
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400'
+                ? 'border-signal/40 bg-signal/10 text-signal'
                 : 'border-border bg-card text-muted-foreground hover:bg-accent',
             )}
           >
@@ -422,7 +422,7 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
                   {items.map((opp, i) => {
                     const typeCfg = TYPE_CONFIG[opp.type] ?? { label: opp.type, color: 'text-muted-foreground', bg: '' };
                     return (
-                      <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5">
+                      <div key={i} className="flex items-center gap-3 hud-panel rounded-lg px-4 py-2.5">
                         <div className="shrink-0 text-center w-10">
                           <p className="text-sm font-bold text-foreground">{opp.deadline?.slice(8, 10)}</p>
                           <p className="text-[9px] text-muted-foreground uppercase">{new Date(`${opp.deadline}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })}</p>
@@ -431,14 +431,14 @@ export function EventsClient({ opportunities }: { opportunities: ProcessedOpport
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className={cn('text-[10px] font-semibold', typeCfg.color)}>{typeCfg.label}</span>
-                            {opp.status === 'closing_soon' && <span className="text-[10px] text-red-400">· Closing soon</span>}
+                            {opp.status === 'closing_soon' && <span className="text-[10px] text-risk-critical">· Closing soon</span>}
                           </div>
                           <p className="text-xs font-medium truncate">{opp.title}</p>
                         </div>
                         {opp.prizeTotal && (
-                          <span className="text-xs font-bold text-yellow-400 shrink-0">{opp.prizeTotal}</span>
+                          <span className="text-xs font-mono font-bold text-risk-medium shrink-0">{opp.prizeTotal}</span>
                         )}
-                        <span className={cn('text-xs font-bold shrink-0', opp.matchScore >= 8 ? 'text-emerald-400' : 'text-muted-foreground')}>
+                        <span className={cn('text-xs font-mono font-bold shrink-0', opp.matchScore >= 8 ? 'text-signal' : 'text-muted-foreground')}>
                           {opp.matchScore}/10
                         </span>
                         {opp.sourceUrl && (

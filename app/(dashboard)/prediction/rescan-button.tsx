@@ -35,17 +35,17 @@ export function RescanButton({ agent }: { agent: string }) {
   return (
     <div className="flex items-center gap-2">
       {status === 'queued' && (
-        <span className="text-xs text-emerald-400">Scan queued ✓</span>
+        <span className="text-xs font-mono text-signal">Scan queued ✓</span>
       )}
       {status === 'error' && (
-        <span className="text-xs text-red-400 max-w-[280px] truncate" title={errMsg}>
+        <span className="text-xs font-mono text-risk-critical max-w-[280px] truncate" title={errMsg}>
           ✗ {errMsg || 'Failed'}
         </span>
       )}
       <button
         onClick={handleClick}
         disabled={loading}
-        className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="rounded-sm border border-signal/40 bg-signal/15 px-3 py-1.5 text-xs font-mono font-semibold uppercase tracking-wide text-signal hover:bg-signal/25 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         {loading ? 'Scanning…' : 'Scan Now'}
       </button>

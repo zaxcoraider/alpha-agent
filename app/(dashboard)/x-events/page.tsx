@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 import type { XEvent } from '@/lib/agents/x-events';
 import { XEventsClient } from './x-events-client';
 import { RescanButton } from '@/app/(dashboard)/news/rescan-button';
+import { PageHeader, EmptyState } from '@/components/ui/hud';
 
 async function getEvents(): Promise<XEvent[]> {
   try {
@@ -38,31 +39,22 @@ export default async function XEventsPage() {
   const [events, lastRun] = await Promise.all([getEvents(), getLastRun()]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">X Events</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Spaces · Viral Threads · KOL Alerts · Airdrops · Token Unlocks · Listings · scans every hour
-          </p>
-          {lastRun?.finishedAt && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Last scan: {new Date(lastRun.finishedAt).toLocaleString()} ·{' '}
-              {lastRun.itemsFound ?? 0} events scanned
-            </p>
-          )}
-        </div>
-        <RescanButton agent="x_events" />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow="X Events"
+        title="X Events"
+        subtitle="Spaces · Viral Threads · KOL Alerts · Airdrops · Token Unlocks · Listings · every 2h"
+        meta={lastRun?.finishedAt
+          ? `last scan ${new Date(lastRun.finishedAt).toLocaleString()} · ${lastRun.itemsFound ?? 0} events scanned`
+          : undefined}
+        actions={<RescanButton agent="x_events" />}
+      />
 
       {events.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center">
-          <p className="text-muted-foreground text-sm mb-2">No X events in the database yet.</p>
-          <p className="text-muted-foreground text-xs">
-            Click <span className="font-mono bg-white/5 px-1 rounded">Rescan</span> to trigger a scan,
-            or wait for the automatic hourly cron job. Requires a running Postgres instance.
-          </p>
-        </div>
+        <EmptyState
+          title="No X events yet."
+          hint={<>Click <strong className="text-muted-foreground">Scan Now</strong> to trigger a scan, or wait for the automatic 2-hour cron.</>}
+        />
       ) : (
         <XEventsClient events={events} />
       )}

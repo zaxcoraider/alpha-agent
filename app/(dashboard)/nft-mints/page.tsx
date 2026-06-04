@@ -4,6 +4,7 @@ import { eq, desc } from 'drizzle-orm';
 import type { NFTMint } from '@/lib/agents/nft-mints';
 import { MintsClient } from './mints-client';
 import { RescanButton } from '@/app/(dashboard)/news/rescan-button';
+import { PageHeader, EmptyState } from '@/components/ui/hud';
 
 async function getMints(): Promise<NFTMint[]> {
   try {
@@ -40,32 +41,22 @@ export default async function NftMintsPage() {
   const [mints, lastRun] = await Promise.all([getMints(), getLastRun()]);
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">NFT Mints</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Early-alpha NFT mints from CT, Reservoir & Magic Eden · scans every 15 min
-          </p>
-          {lastRun?.finishedAt && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Last scan: {new Date(lastRun.finishedAt).toLocaleString()} ·{' '}
-              {lastRun.itemsFound ?? 0} projects scanned
-            </p>
-          )}
-        </div>
-        <RescanButton agent="nft_mints" />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        eyebrow="NFT Mints"
+        title="NFT Mints"
+        subtitle="Early-alpha NFT mints from CT, Reservoir & Magic Eden · every 4h"
+        meta={lastRun?.finishedAt
+          ? `last scan ${new Date(lastRun.finishedAt).toLocaleString()} · ${lastRun.itemsFound ?? 0} projects scanned`
+          : undefined}
+        actions={<RescanButton agent="nft_mints" />}
+      />
 
       {mints.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center">
-          <p className="text-muted-foreground text-sm mb-2">No NFT mints in the database yet.</p>
-          <p className="text-muted-foreground text-xs">
-            Click <span className="font-mono bg-white/5 px-1 rounded">Rescan</span> to trigger a scan, or wait for the
-            automatic 15-minute cron job. Requires a running Postgres instance.
-          </p>
-        </div>
+        <EmptyState
+          title="No NFT mints yet."
+          hint={<>Click <strong className="text-muted-foreground">Scan Now</strong> to trigger a scan, or wait for the automatic 4-hour cron.</>}
+        />
       ) : (
         <MintsClient mints={mints} />
       )}

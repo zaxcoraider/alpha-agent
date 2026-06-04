@@ -49,29 +49,15 @@ const IMPACT_CONFIG: Record<XEvent['priceImpact'], { label: string; color: strin
 // ── Chip helper ───────────────────────────────────────────────────────────────
 
 function Chip({
-  label, active, color = 'emerald', onClick,
+  label, active, onClick,
 }: { label: string; active: boolean; color?: string; onClick: () => void }) {
-  const activeCls: Record<string, string> = {
-    emerald: 'bg-emerald-600 border-emerald-500 text-white',
-    sky:     'bg-sky-600 border-sky-500 text-white',
-    orange:  'bg-orange-600 border-orange-500 text-white',
-    violet:  'bg-violet-600 border-violet-500 text-white',
-    rose:    'bg-rose-600 border-rose-500 text-white',
-  };
-  const hoverCls: Record<string, string> = {
-    emerald: 'hover:border-emerald-500/50',
-    sky:     'hover:border-sky-500/40',
-    orange:  'hover:border-orange-500/40',
-    violet:  'hover:border-violet-500/40',
-    rose:    'hover:border-rose-500/40',
-  };
   return (
     <button
       onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors ${
+      className={`shrink-0 px-2.5 py-1 rounded-sm text-[11px] font-mono uppercase tracking-wide border transition-colors ${
         active
-          ? (activeCls[color] ?? activeCls.emerald)
-          : `bg-card border-border text-muted-foreground ${hoverCls[color] ?? hoverCls.emerald}`
+          ? 'bg-signal/15 text-signal border-signal/40'
+          : 'bg-card border-border text-muted-foreground hover:border-signal/30 hover:text-foreground'
       }`}
     >
       {label}
@@ -89,8 +75,8 @@ function ScoreDots({ score }: { score: number }) {
           key={i}
           className={`h-1.5 w-1.5 rounded-full ${
             i < score
-              ? score >= 8 ? 'bg-emerald-400' : score >= 5 ? 'bg-yellow-400' : 'bg-slate-500'
-              : 'bg-white/10'
+              ? score >= 8 ? 'bg-signal' : score >= 5 ? 'bg-risk-medium' : 'bg-muted-foreground/50'
+              : 'bg-muted'
           }`}
         />
       ))}
@@ -108,12 +94,12 @@ function EventCard({ event }: { event: XEvent }) {
   const { Icon } = cfg;
 
   return (
-    <div className={`rounded-xl border bg-card p-4 flex flex-col gap-3 transition-colors ${
+    <div className={`hud-panel rounded-lg p-4 flex flex-col gap-3 transition-colors ${
       event.urgency === 'live' && event.relevanceScore >= 7
-        ? 'border-red-500/40 bg-red-950/10'
+        ? 'border-risk-critical/40'
         : event.relevanceScore >= 8
-        ? 'border-emerald-500/30'
-        : 'border-border'
+        ? 'border-signal/30'
+        : ''
     }`}>
       {/* Header row */}
       <div className="flex items-start gap-2">
@@ -189,15 +175,15 @@ function EventCard({ event }: { event: XEvent }) {
       <div className="flex items-center gap-2">
         <span className="text-[10px] text-muted-foreground w-16">Relevance</span>
         <ScoreDots score={event.relevanceScore} />
-        <span className={`text-[10px] font-bold ml-1 ${
-          event.relevanceScore >= 8 ? 'text-emerald-400' :
-          event.relevanceScore >= 5 ? 'text-yellow-400'  : 'text-slate-500'
+        <span className={`text-[10px] font-mono font-bold ml-1 ${
+          event.relevanceScore >= 8 ? 'text-signal' :
+          event.relevanceScore >= 5 ? 'text-risk-medium'  : 'text-muted-foreground'
         }`}>{event.relevanceScore}/10</span>
       </div>
 
       {/* Actionable banner */}
       {event.actionable && event.actionSummary && (
-        <div className="rounded-lg bg-emerald-950/30 border border-emerald-500/25 px-3 py-2 text-xs text-emerald-300">
+        <div className="rounded-lg bg-signal/10 border border-signal/25 px-3 py-2 text-xs text-signal">
           → {event.actionSummary}
         </div>
       )}
@@ -212,7 +198,7 @@ function EventCard({ event }: { event: XEvent }) {
       </button>
 
       {expanded && (
-        <div className="rounded-lg bg-white/5 p-3 text-xs text-muted-foreground leading-relaxed space-y-1.5">
+        <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground leading-relaxed space-y-1.5">
           <p>{event.relevanceReason}</p>
           {event.impactReason && (
             <p className={impact.color}>{event.impactReason}</p>
@@ -223,7 +209,7 @@ function EventCard({ event }: { event: XEvent }) {
       {/* Link */}
       {event.url && (
         <a href={event.url} target="_blank" rel="noopener noreferrer" className="mt-auto">
-          <button className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs h-8 font-medium transition-colors">
+          <button className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-muted hover:bg-accent border border-border text-xs h-8 font-medium font-mono uppercase tracking-wide transition-colors">
             <ExternalLink className="h-3 w-3" />
             Open
           </button>
@@ -240,9 +226,9 @@ function LiveSection({ events }: { events: XEvent[] }) {
   if (live.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-red-500/40 bg-red-950/10 p-4">
-      <div className="flex items-center gap-2 text-red-400 font-semibold text-sm mb-3">
-        <span className="h-2 w-2 rounded-full bg-red-400 animate-pulse" />
+    <div className="hud-panel rounded-lg border-risk-critical/40 p-4">
+      <div className="flex items-center gap-2 text-risk-critical font-semibold text-sm mb-3 font-mono uppercase tracking-wide">
+        <span className="h-2 w-2 rounded-full bg-risk-critical animate-pulse-dot" />
         Live Right Now ({live.length})
       </div>
       <div className="flex flex-wrap gap-2">
@@ -379,7 +365,7 @@ export function XEventsClient({ events }: XEventsClientProps) {
           step={1}
           value={minScore}
           onChange={(e) => setMinScore(Number(e.target.value))}
-          className="max-w-xs accent-violet-500"
+          className="max-w-xs accent-emerald-500"
         />
       </div>
 
@@ -388,7 +374,7 @@ export function XEventsClient({ events }: XEventsClientProps) {
       </p>
 
       {filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border p-12 text-center text-muted-foreground text-sm">
+        <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground text-sm">
           No events match your filters.
         </div>
       ) : (

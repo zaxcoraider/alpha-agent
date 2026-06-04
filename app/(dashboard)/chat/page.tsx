@@ -169,13 +169,13 @@ function ModelPicker({ value, onChange, placeholder = 'Select model' }: {
                   <button
                     key={m.id}
                     onClick={() => { onChange(m.id); setOpen(false); }}
-                    className={cn('w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-accent transition-colors', m.id === value && 'bg-emerald-500/10')}
+                    className={cn('w-full px-3 py-2 text-left flex items-start gap-2 hover:bg-accent transition-colors', m.id === value && 'bg-signal/10')}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate text-foreground">{m.label}</p>
                       <p className="text-[10px] text-muted-foreground">{m.desc}</p>
                     </div>
-                    {m.id === value && <Check size={11} className="shrink-0 mt-0.5 text-emerald-400" />}
+                    {m.id === value && <Check size={11} className="shrink-0 mt-0.5 text-signal" />}
                   </button>
                 ))}
               </div>
@@ -453,8 +453,9 @@ export default function ChatPage() {
       {/* ── Top header ── */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border shrink-0">
         <div>
-          <h1 className="text-xl font-bold">Chat</h1>
-          <p className="text-xs text-muted-foreground">DGrid · {totalModels} models</p>
+          <p className="text-[10px] font-mono tracking-[0.22em] uppercase text-signal mb-0.5">// Chat</p>
+          <h1 className="text-xl font-bold tracking-tight">Chat</h1>
+          <p className="text-xs text-muted-foreground font-mono">DGrid · {totalModels} models</p>
         </div>
         {/* Top mode tabs */}
         <div className="flex rounded-lg border border-border bg-muted/20 p-0.5 gap-0.5">
@@ -472,7 +473,7 @@ export default function ChatPage() {
                   ? key === 'strategist'
                     ? 'bg-purple-600/20 text-purple-300 shadow-sm border border-purple-500/20'
                     : key === 'market'
-                      ? 'bg-emerald-600/20 text-emerald-300 shadow-sm border border-emerald-500/20'
+                      ? 'bg-signal/20 text-signal shadow-sm border border-signal/30'
                       : 'bg-card text-foreground shadow-sm'
                   : 'text-muted-foreground hover:text-foreground',
               )}
@@ -497,9 +498,9 @@ export default function ChatPage() {
                 key={qm.key}
                 onClick={() => setQuickMode(quickMode === qm.key ? null : qm.key)}
                 className={cn(
-                  'shrink-0 rounded-full px-3 py-1 text-xs transition-all whitespace-nowrap',
+                  'shrink-0 rounded-sm px-3 py-1 text-xs transition-all whitespace-nowrap',
                   quickMode === qm.key
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    ? 'bg-signal/20 text-signal border border-signal/40'
                     : 'bg-muted/40 text-muted-foreground hover:bg-muted/70 border border-transparent',
                 )}
               >
@@ -531,7 +532,7 @@ export default function ChatPage() {
 
           {topMode === 'market' && (
             <div className="flex items-center gap-2 pb-2 shrink-0">
-              <span className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 rounded-full px-3 py-1 border border-emerald-500/20">
+              <span className="flex items-center gap-1.5 text-xs text-signal bg-signal/10 rounded-sm px-3 py-1 border border-signal/30">
                 <Globe size={11} /> Market Intelligence mode — ask about tokens, trends, DeFi, setups
               </span>
             </div>
@@ -562,7 +563,7 @@ export default function ChatPage() {
                       </div>
                       <input type="range" min={0} max={1} step={0.1} value={temperature}
                         onChange={(e) => setTemp(Number(e.target.value))}
-                        className="w-full accent-emerald-500" />
+                        className="w-full accent-signal" />
                       <div className="flex justify-between text-[9px] text-muted-foreground/40 mt-1">
                         <span>Precise</span><span>Creative</span>
                       </div>
@@ -579,7 +580,7 @@ export default function ChatPage() {
                       className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs hover:bg-accent transition-colors">
                       <History size={11} />
                       {histories.length > 0 && (
-                        <span className="rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] px-1.5">{histories.length}</span>
+                        <span className="rounded-sm font-mono bg-signal/20 text-signal text-[9px] px-1.5">{histories.length}</span>
                       )}
                     </button>
                     {showHistory && (
@@ -615,7 +616,7 @@ export default function ChatPage() {
                   <button onClick={() => copyMsg(messages.map((m) => `${m.role === 'user' ? 'You' : 'AI'}: ${m.content}`).join('\n\n'), '__all')}
                     disabled={messages.length === 0}
                     className="rounded-lg border border-border bg-card p-1.5 hover:bg-accent transition-colors disabled:opacity-40">
-                    {copiedId === '__all' ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} className="text-muted-foreground" />}
+                    {copiedId === '__all' ? <Check size={13} className="text-signal" /> : <Copy size={13} className="text-muted-foreground" />}
                   </button>
                   <div className="relative group/exp">
                     <button disabled={messages.length === 0} className="rounded-lg border border-border bg-card p-1.5 hover:bg-accent transition-colors disabled:opacity-40">
@@ -640,9 +641,9 @@ export default function ChatPage() {
                     <div className="text-center space-y-3 max-w-xs">
                       <div className={cn('flex h-12 w-12 items-center justify-center rounded-2xl mx-auto border',
                         topMode === 'market'
-                          ? 'bg-emerald-500/10 border-emerald-500/20'
+                          ? 'bg-signal/10 border-signal/30'
                           : 'bg-primary/10 border-primary/20')}>
-                        {topMode === 'market' ? <TrendingUp size={20} className="text-emerald-400" /> : <Zap size={20} className="text-primary" />}
+                        {topMode === 'market' ? <TrendingUp size={20} className="text-signal" /> : <Zap size={20} className="text-primary" />}
                       </div>
                       <p className="text-sm font-semibold">{topMode === 'market' ? 'Market Intelligence' : 'Alpha Agent Chat'}</p>
                       <p className="text-xs text-muted-foreground">
@@ -656,8 +657,8 @@ export default function ChatPage() {
                 {messages.map((m) => (
                   <div key={m.id} className={cn('flex gap-2.5', m.role === 'user' ? 'flex-row-reverse' : 'flex-row')}>
                     <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
-                      m.role === 'user' ? 'bg-primary/15 border border-primary/20' : 'bg-emerald-500/10 border border-emerald-500/20')}>
-                      {m.role === 'user' ? <User size={13} className="text-primary" /> : <Bot size={13} className="text-emerald-400" />}
+                      m.role === 'user' ? 'bg-primary/15 border border-primary/20' : 'bg-signal/10 border border-signal/30')}>
+                      {m.role === 'user' ? <User size={13} className="text-primary" /> : <Bot size={13} className="text-signal" />}
                     </div>
                     <div className={cn('max-w-[78%] rounded-xl px-4 py-3 text-sm',
                       m.role === 'user' ? 'bg-primary/10 border border-primary/15' : 'bg-card border border-border')}>
@@ -665,7 +666,7 @@ export default function ChatPage() {
                       {m.role === 'assistant' && (
                         <button onClick={() => copyMsg(m.content, m.id)}
                           className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                          {copiedId === m.id ? <><Check size={9} className="text-emerald-400" />copied</> : <><Copy size={9} />copy</>}
+                          {copiedId === m.id ? <><Check size={9} className="text-signal" />copied</> : <><Copy size={9} />copy</>}
                         </button>
                       )}
                     </div>
@@ -673,8 +674,8 @@ export default function ChatPage() {
                 ))}
                 {isLoading && (
                   <div className="flex gap-2.5">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                      <Bot size={13} className="text-emerald-400" />
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-signal/10 border border-signal/30">
+                      <Bot size={13} className="text-signal" />
                     </div>
                     <div className="rounded-xl border border-border bg-card px-4 py-3">
                       <span className="flex gap-1">
@@ -700,11 +701,11 @@ export default function ChatPage() {
                   }}
                   placeholder={topMode === 'market' ? 'Ask about a token, DeFi protocol, trade setup…' : 'Ask anything… (Shift+Enter for new line)'}
                   rows={1} disabled={isLoading}
-                  className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/30 disabled:opacity-50 overflow-hidden"
+                  className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-signal/40 focus:border-signal/40 disabled:opacity-50 overflow-hidden"
                   style={{ minHeight: '42px', maxHeight: '140px' }}
                 />
                 <button type="submit" disabled={isLoading || !input.trim()}
-                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors shrink-0">
+                  className="flex items-center gap-1.5 rounded-xl border border-signal/40 bg-signal/15 text-signal hover:bg-signal/25 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold font-mono uppercase tracking-wide transition-colors shrink-0">
                   <Send size={14} />Send
                 </button>
               </form>
@@ -717,7 +718,7 @@ export default function ChatPage() {
               <div className="flex items-center gap-2 pb-2 shrink-0 flex-wrap">
                 <span className="text-xs text-muted-foreground shrink-0">Models ({groupModels.length}/6):</span>
                 {groupModels.map((mid) => (
-                  <span key={mid} className="flex items-center gap-1.5 rounded-full bg-card border border-border px-2.5 py-1 text-xs">
+                  <span key={mid} className="flex items-center gap-1.5 rounded-sm bg-card border border-border px-2.5 py-1 text-xs">
                     <span className={cn('text-[10px] font-bold', getProviderBadge(mid))}>{getProviderName(mid).slice(0, 2)}</span>
                     {getLabel(mid)}
                     {groupModels.length > 2 && (
@@ -754,7 +755,7 @@ export default function ChatPage() {
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-border/50 bg-muted/10 shrink-0">
                               <span className={cn('text-[10px] font-bold', getProviderBadge(mid))}>{getProviderName(mid)}</span>
                               <span className="text-[10px] text-muted-foreground flex-1 truncate">{getLabel(mid)}</span>
-                              {!done && text.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+                              {!done && text.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-signal animate-pulse shrink-0" />}
                             </div>
                             <div className="flex-1 overflow-y-auto p-3 max-h-64 min-h-[60px]">
                               {text ? (
@@ -768,7 +769,7 @@ export default function ChatPage() {
                             {text && (
                               <div className="px-3 pb-2 border-t border-border/30 pt-1 shrink-0">
                                 <button onClick={() => copyMsg(text, key)} className="flex items-center gap-1 text-[10px] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                                  {copiedId === key ? <><Check size={9} className="text-emerald-400" />copied</> : <><Copy size={9} />copy</>}
+                                  {copiedId === key ? <><Check size={9} className="text-signal" />copied</> : <><Copy size={9} />copy</>}
                                 </button>
                               </div>
                             )}
@@ -786,11 +787,11 @@ export default function ChatPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendGroup(); } }}
                   placeholder={`Ask all ${groupModels.length} models… (Shift+Enter for new line)`}
                   rows={1} disabled={groupLoading}
-                  className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500/40 focus:border-emerald-500/30 disabled:opacity-50 overflow-hidden"
+                  className="flex-1 resize-none rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-signal/40 focus:border-signal/40 disabled:opacity-50 overflow-hidden"
                   style={{ minHeight: '42px', maxHeight: '140px' }}
                 />
                 <button onClick={sendGroup} disabled={groupLoading || !groupInput.trim()}
-                  className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors shrink-0">
+                  className="flex items-center gap-1.5 rounded-xl border border-signal/40 bg-signal/15 text-signal hover:bg-signal/25 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold font-mono uppercase tracking-wide transition-colors shrink-0">
                   <Send size={14} />{groupLoading ? 'Sending…' : 'Ask All'}
                 </button>
               </div>
@@ -825,7 +826,7 @@ export default function ChatPage() {
               <div className="flex flex-wrap gap-1.5">
                 {STRAT_TEMPLATES.map((t) => (
                   <button key={t.key} onClick={() => setBrief(t.brief)}
-                    className="rounded-full px-3 py-1 text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 hover:bg-purple-500/20 transition-colors whitespace-nowrap">
+                    className="rounded-sm px-3 py-1 text-xs bg-purple-500/10 text-purple-300 border border-purple-500/20 hover:bg-purple-500/20 transition-colors whitespace-nowrap">
                     {t.label}
                   </button>
                 ))}
@@ -939,7 +940,7 @@ export default function ChatPage() {
                 <div className="flex-1" />
                 <button onClick={copyPlan}
                   className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs hover:bg-accent transition-colors">
-                  {planCopied ? <><Check size={11} className="text-emerald-400" />Copied!</> : <><Copy size={11} />Copy plan</>}
+                  {planCopied ? <><Check size={11} className="text-signal" />Copied!</> : <><Copy size={11} />Copy plan</>}
                 </button>
                 <button
                   onClick={() => {

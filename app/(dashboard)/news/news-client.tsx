@@ -39,12 +39,12 @@ const ALL_CATEGORIES = ['protocol','hack','funding','regulation','meme','infra',
 
 function ScoreBadge({ score }: { score: number }) {
   const color = score >= 8
-    ? 'bg-emerald-500/20 text-emerald-400'
+    ? 'bg-signal/15 text-signal border-signal/40'
     : score >= 5
-    ? 'bg-yellow-500/20 text-yellow-400'
-    : 'bg-muted text-muted-foreground';
+    ? 'bg-risk-medium/10 text-risk-medium border-risk-medium/40'
+    : 'bg-muted text-muted-foreground border-border';
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-bold tabular-nums ${color}`}>
+    <span className={`rounded-sm border px-1.5 py-0.5 text-[10px] font-mono font-bold tabular-nums ${color}`}>
       {score.toFixed(1)}
     </span>
   );
@@ -55,13 +55,13 @@ function NewsCard({ item }: { item: NewsItem }) {
   const ageLabel = age < 60 ? `${age}m ago` : `${Math.round(age / 60)}h ago`;
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-2">
+    <div className="hud-panel rounded-lg p-4 space-y-2">
       <div className="flex items-start justify-between gap-3">
         <a
           href={item.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-sm font-medium leading-snug hover:text-primary transition-colors"
+          className="text-sm font-medium leading-snug hover:text-signal transition-colors"
         >
           {item.title}
         </a>
@@ -76,17 +76,17 @@ function NewsCard({ item }: { item: NewsItem }) {
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`rounded-full px-2 py-0.5 text-xs ${CATEGORY_COLORS[item.category] ?? 'bg-muted text-muted-foreground'}`}>
+        <span className={`rounded-sm px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide ${CATEGORY_COLORS[item.category] ?? 'bg-muted text-muted-foreground'}`}>
           {item.category}
         </span>
         {item.chains.map((c) => (
-          <span key={c} className={`rounded-full px-2 py-0.5 text-xs ${CHAIN_COLORS[c] ?? CHAIN_COLORS.unknown}`}>
+          <span key={c} className={`rounded-sm px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wide ${CHAIN_COLORS[c] ?? CHAIN_COLORS.unknown}`}>
             {c}
           </span>
         ))}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground border-t border-border pt-2">
+      <div className="flex items-center gap-2 text-[11px] font-mono text-muted-foreground border-t border-border/60 pt-2">
         <span>{item.source}</span>
         <span>·</span>
         <span>{ageLabel}</span>
@@ -128,10 +128,10 @@ export function NewsClient({ items }: Props) {
           <button
             key={c}
             onClick={() => toggleChain(c)}
-            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors border ${
+            className={`rounded-sm px-2.5 py-1 text-[11px] font-mono uppercase tracking-wide transition-colors border ${
               chainFilter.includes(c)
                 ? `${CHAIN_COLORS[c]} border-transparent`
-                : 'border-border text-muted-foreground hover:border-muted-foreground'
+                : 'border-border text-muted-foreground hover:border-signal/30 hover:text-foreground'
             }`}
           >
             {c}
@@ -145,10 +145,10 @@ export function NewsClient({ items }: Props) {
           <button
             key={c}
             onClick={() => toggleCat(c)}
-            className={`rounded-full px-2.5 py-0.5 text-xs transition-colors border ${
+            className={`rounded-sm px-2.5 py-1 text-[11px] font-mono uppercase tracking-wide transition-colors border ${
               catFilter.includes(c)
                 ? `${CATEGORY_COLORS[c]} border-transparent`
-                : 'border-border text-muted-foreground hover:border-muted-foreground'
+                : 'border-border text-muted-foreground hover:border-signal/30 hover:text-foreground'
             }`}
           >
             {c}
@@ -157,7 +157,7 @@ export function NewsClient({ items }: Props) {
         <select
           value={minScore}
           onChange={(e) => setMinScore(Number(e.target.value))}
-          className="ml-auto rounded-md border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground"
+          className="ml-auto rounded-sm border border-border bg-card px-2 py-1 text-[11px] font-mono text-muted-foreground"
         >
           <option value={0}>All scores</option>
           <option value={5}>Score ≥ 5</option>
@@ -187,7 +187,7 @@ export function NewsClient({ items }: Props) {
       </div>
 
       {filtered.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border p-12 text-center text-muted-foreground">
+        <div className="hud-panel rounded-lg p-12 text-center text-muted-foreground">
           <p className="text-sm">No items match the current filters.</p>
         </div>
       )}
