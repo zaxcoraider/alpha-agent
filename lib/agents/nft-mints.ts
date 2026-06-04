@@ -129,6 +129,42 @@ Optional (use null if unknown): supply, mintLink, contractAddress, floorPredicti
   }
 }
 
+// ── Fallback: keep a sourced project when Opus analysis fails ─────────────────
+// scanCTForMints already returns well-formed RawNFTProjects. If the analyzer
+// call fails or its response misses a required schema field, degrade to neutral
+// scores instead of dropping the mint, so the tab still shows sourced projects.
+function fallbackFromRawNFT(raw: RawNFTProject): NFTMint {
+  return {
+    name:              raw.name,
+    chain:             raw.chain,
+    mintPrice:         Math.max(0, raw.mintPrice),
+    mintPriceCurrency: raw.mintPriceCurrency,
+    supply:            raw.supply,
+    mintStatus:        raw.mintStatus,
+    mintLink:          raw.mintLink,
+    contractAddress:   raw.contractAddress,
+    contractVerified:  raw.contractVerified,
+    teamDoxxed:        raw.teamDoxxed,
+    ctMentions:        raw.ctMentions,
+    ctVelocity:        raw.ctVelocity,
+    mentionedByKOL:    raw.mentionedByKOL,
+    kolHandles:        raw.kolHandles,
+    alphaScore:        50,
+    alphaBreakdown:    'Auto-listed from live X scan (analyzer unavailable)',
+    rugRisk:           'medium',
+    rugFlags:          [],
+    futurePotential:   5,
+    isFree:            raw.mintPrice === 0,
+    mintStrategy:      '',
+    bluechipScore:     0,
+    nextSteps:         '',
+    whaleActivity:     raw.whaleActivity,
+    whaleWallets:      raw.whaleWallets,
+    gasEstimate:       raw.gasEstimate,
+    source:            raw.source,
+  };
+}
+
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 export async function runNFTMintsScan(): Promise<{
@@ -163,11 +199,18 @@ export async function runNFTMintsScan(): Promise<{
   // Analyze all in parallel — no second Grok call (saves credits)
   const results = await Promise.allSettled(grokFirst.map((p) => analyzeProject(p, '')));
   const mints: NFTMint[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) mints.push(r.value);
-  }
+  let degraded = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value) {
+      mints.push(r.value);
+    } else {
+      // Analyzer failed — keep the sourced project with neutral defaults rather than drop it.
+      mints.push(fallbackFromRawNFT(grokFirst[i]));
+      degraded++;
+    }
+  });
 
-  console.log(`[nft-mints] analysis done: ${mints.length} mints produced`);
+  console.log(`[nft-mints] analysis done: ${mints.length} mints produced (${degraded} via fallback)`);
 
   // Filter sold out + sort by alpha score
   const active = mints.filter((m) => m.mintStatus !== 'sold_out');

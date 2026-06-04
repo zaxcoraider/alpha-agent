@@ -99,6 +99,36 @@ Optional fields (use null if unknown):
   }
 }
 
+// ── Fallback: build a savable event from raw source data when scoring fails ────
+// The source (Grok→GLM) already produces a well-formed RawXEvent. If the Sonnet
+// scoring call fails or returns a response that misses a required schema field,
+// we must NOT drop the event — degrade gracefully to neutral scores so the tab
+// still shows sourced events (mirrors the news pre-filter fallback).
+function fallbackFromRaw(raw: RawXEvent): XEvent {
+  return {
+    type:            raw.type,
+    title:           raw.title,
+    description:     raw.description.slice(0, 300),
+    kolHandle:       raw.kolHandle,
+    followersCount:  raw.followersCount,
+    ticker:          raw.ticker,
+    chain:           raw.chain,
+    scheduledFor:    raw.scheduledFor,
+    url:             raw.url,
+    urgency:         raw.urgency,
+    engagementCount: raw.engagementCount,
+    narrativeTags:   raw.narrativeTags ?? [],
+    ctSentiment:     raw.ctSentiment ?? 'neutral',
+    relevanceScore:  5,
+    relevanceReason: 'Auto-listed from live X scan (analyzer unavailable)',
+    actionable:      false,
+    actionSummary:   '',
+    priceImpact:     'unknown',
+    impactReason:    '',
+    source:          raw.source,
+  };
+}
+
 // ── Main scan ─────────────────────────────────────────────────────────────────
 
 export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: number }> {
@@ -119,11 +149,18 @@ export async function runXEventsScan(): Promise<{ events: XEvent[]; scanned: num
 
   const results = await Promise.allSettled(toScore.map((e) => scoreEvent(e, '')));
   const events: XEvent[] = [];
-  for (const r of results) {
-    if (r.status === 'fulfilled' && r.value) events.push(r.value);
-  }
+  let degraded = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value) {
+      events.push(r.value);
+    } else {
+      // Scoring failed — keep the sourced event with neutral defaults rather than drop it.
+      events.push(fallbackFromRaw(toScore[i]));
+      degraded++;
+    }
+  });
 
-  console.log(`[x-events] scoring done: ${events.length} events produced`);
+  console.log(`[x-events] scoring done: ${events.length} events produced (${degraded} via fallback)`);
 
   // Sort: urgency first, then relevance
   const urgencyOrder: Record<XEvent['urgency'], number> = {
