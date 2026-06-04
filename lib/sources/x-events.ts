@@ -1,7 +1,8 @@
-import { generateText, generateObject } from 'ai';
+import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid, dgridNoTemp } from '@/lib/llm/client';
+import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
+import { grokLiveReport, NEVER_EMPTY_SUFFIX } from './grok-live';
 
 // ── Raw event schema ──────────────────────────────────────────────────────────
 
@@ -39,13 +40,9 @@ export type RawXEvent = z.infer<typeof GrokXEventSchema>['events'][0] & {
 // ── 2-step pipeline: Grok fetches live CT → DeepSeek structures it ────────────
 
 export async function scanXEvents(): Promise<RawXEvent[]> {
-  // Step 1: Grok searches X in real-time (generateText — works on DGrid)
-  let ctReport = '';
-  try {
-    const { text } = await generateText({
-      model:       dgridNoTemp(MODELS.grok),
-      abortSignal: AbortSignal.timeout(40_000),
-      prompt: `Search X (Twitter) right now for the most important crypto events in the last 12-24 hours. Cover all 8 categories:
+  // Step 1: Grok searches X in real-time (retries on empty — live search is flaky)
+  const ctReport = await grokLiveReport(
+    `Search X (Twitter) right now for the most important crypto events in the last 12-24 hours. Cover all 8 categories:
 
 1. SPACES — Live or upcoming X Spaces from crypto KOLs. Include: host handle, topic, live now or scheduled time.
 2. VIRAL THREADS — Threads with >500 likes/RTs in last 6-12h. Include: author, engagement count, what it says.
@@ -56,13 +53,9 @@ export async function scanXEvents(): Promise<RawXEvent[]> {
 7. NARRATIVE SHIFTS — What topics are dominating CT right now? What is the whole space talking about?
 8. WHALE MOVES — Large on-chain movements or whale accumulation/distribution signals on-chain.
 
-Be specific: use real handles, real tickers, real dates, real engagement numbers. This data feeds a live crypto intelligence dashboard.`,
-    });
-    ctReport = text;
-  } catch (err) {
-    console.error('[sources/x-events] Grok step-1 failed:', err);
-    return [];
-  }
+Be specific: use real handles, real tickers, real dates, real engagement numbers. This data feeds a live crypto intelligence dashboard.${NEVER_EMPTY_SUFFIX}`,
+    'x-events',
+  );
 
   if (!ctReport.trim()) return [];
 

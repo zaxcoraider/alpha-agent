@@ -1,8 +1,9 @@
-import { generateText, generateObject } from 'ai';
+import { generateObject } from 'ai';
 import { z } from 'zod';
-import { dgrid, dgridNoTemp } from '@/lib/llm/client';
+import { dgrid } from '@/lib/llm/client';
 import { MODELS } from '@/lib/llm/models';
 import { env } from '@/lib/env';
+import { grokLiveReport, NEVER_EMPTY_SUFFIX } from './grok-live';
 
 // ── Raw project schema from Grok scan ────────────────────────────────────────
 
@@ -48,13 +49,9 @@ export type RawNFTProject = z.infer<typeof GrokNFTSchema>['projects'][0] & {
 // ── 2-step pipeline: Grok fetches live CT → DeepSeek structures it ────────────
 
 export async function scanCTForMints(): Promise<RawNFTProject[]> {
-  // Step 1: Grok searches X in real-time for live NFT mint signals
-  let ctReport = '';
-  try {
-    const { text } = await generateText({
-      model:       dgridNoTemp(MODELS.grok),
-      abortSignal: AbortSignal.timeout(40_000),
-      prompt: `Search X (Twitter) right now for NFT mint opportunities — live, about to launch, or just announced. Focus on early signals with few mentions.
+  // Step 1: Grok searches X in real-time for live NFT mint signals (retries on empty)
+  const ctReport = await grokLiveReport(
+    `Search X (Twitter) right now for NFT mint opportunities — live, about to launch, or just announced.
 
 Search for:
 - "free mint" + contract address or link
@@ -68,13 +65,9 @@ Chains: Solana, Ethereum, Base, Arbitrum, Polygon, BNB Chain
 
 For each project found, report: project name, chain, mint price, mint status (live/upcoming/sold out), mint link, how many X accounts are talking about it, which KOLs mentioned it, any on-chain whale activity, whether team is doxxed, gas estimate.
 
-Prioritize projects with fewer than 50 mentions that are growing fast — those are early alpha.`,
-    });
-    ctReport = text;
-  } catch (err) {
-    console.error('[sources/nft-mints] Grok step-1 failed:', err);
-    return [];
-  }
+Prioritize early-alpha projects with fewer than 50 mentions that are growing fast, but ALSO include other notable live or upcoming mints so the report is never empty. Aim for at least 5 projects.${NEVER_EMPTY_SUFFIX}`,
+    'nft-mints',
+  );
 
   if (!ctReport.trim()) return [];
 
