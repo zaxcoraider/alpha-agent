@@ -8,9 +8,13 @@ import { env } from '@/lib/env';
 
 const en = (v: unknown) => String(v ?? '').toLowerCase().trim().replace(/[\s-]+/g, '_');
 
+// Every field is tolerant (.catch / .optional). In generateObject, a
+// z.array(z.object(...)) fails AS A WHOLE if any one element misses a required
+// field — Grok rarely reports e.g. mentions/hr for an early mint, so a single
+// partial project would otherwise throw the whole parse and return 0 projects.
 const GrokNFTSchema = z.object({
   projects: z.array(z.object({
-    name:              z.string(),
+    name:              z.string().catch('Unknown NFT'),
     chain:             z.preprocess(v => {
       const m: Record<string, string> = {
         sol: 'sol', solana: 'sol', eth: 'eth', ethereum: 'eth', base: 'base',
@@ -19,16 +23,16 @@ const GrokNFTSchema = z.object({
       };
       return m[String(v ?? '').toLowerCase().trim()] ?? 'eth';
     }, z.enum(['sol', 'eth', 'base', 'arbitrum', 'polygon', 'bnb'])).catch('eth'),
-    mintPrice:         z.number().transform(n => Math.max(0, n)),
-    mintPriceCurrency: z.string(),
+    mintPrice:         z.number().transform(n => Math.max(0, n)).catch(0),
+    mintPriceCurrency: z.string().catch('ETH'),
     supply:            z.number().transform(n => Math.round(n)).optional(),
     mintStatus:        z.preprocess(en, z.enum(['not_started', 'live', 'ending_soon', 'sold_out'])).catch('not_started'),
     mintLink:          z.string().optional(),
     contractAddress:   z.string().optional(),
     contractVerified:  z.boolean().catch(false),
     teamDoxxed:        z.boolean().catch(false),
-    ctMentions:        z.number().transform(n => Math.max(0, Math.round(n))),
-    ctVelocity:        z.number().transform(n => Math.max(0, n)),
+    ctMentions:        z.number().transform(n => Math.max(0, Math.round(n))).catch(0),
+    ctVelocity:        z.number().transform(n => Math.max(0, n)).catch(0),
     mentionedByKOL:    z.boolean().catch(false),
     kolHandles:        z.array(z.string()).catch([]),
     whaleActivity:     z.boolean().catch(false),
