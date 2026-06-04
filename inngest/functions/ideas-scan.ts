@@ -7,6 +7,23 @@ import { eq, desc, gte } from 'drizzle-orm';
 import { sendTelegram } from '@/lib/telegram';
 import { env } from '@/lib/env';
 
+// ── Chain normalization (agent emits `bnb`; DB enum only accepts `bsc`) ────────
+// The synthesis agent's Zod enum yields `bnb`, but scanResults.chains is the
+// pgEnum `chain` which has no `bnb` member — an unmapped value throws
+// `invalid input value for enum chain: "bnb"` and fails the whole save step.
+// Mirror the CHAIN_MAP/toDbChains pattern used by dev-events/memes/nft scanners.
+type DbChain = 'sol' | 'eth' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc' | 'sui' | 'unknown';
+
+const CHAIN_MAP: Record<string, DbChain> = {
+  sol: 'sol', eth: 'eth', base: 'base', arbitrum: 'arbitrum',
+  polygon: 'polygon', optimism: 'optimism', sui: 'sui',
+  bnb: 'bsc', bsc: 'bsc', binance: 'bsc',
+};
+
+function toDbChains(chains: string[]): DbChain[] {
+  return [...new Set(chains.map((c) => CHAIN_MAP[c.toLowerCase()] ?? 'unknown'))];
+}
+
 // ── Build context summary from recent scan results ────────────────────────────
 
 async function buildContextSummary(): Promise<string> {
@@ -99,7 +116,7 @@ export const ideasScan = inngest.createFunction(
           title:      idea.title,
           summary:    idea.tldr,
           score:      String(idea.conviction),
-          chains:     idea.chains as ('sol' | 'eth' | 'polygon' | 'arbitrum' | 'base' | 'optimism' | 'bsc' | 'sui' | 'unknown')[],
+          chains:     toDbChains(idea.chains),
           raw:        idea,
         }).onConflictDoUpdate({
           target: [scanResults.agent, scanResults.externalId],
